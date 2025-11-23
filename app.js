@@ -324,12 +324,20 @@ const App = {
                                 const samplePlayerId = Object.keys(data)[0];
                                 const sample = data[samplePlayerId];
                                 if (sample) {
-                                    const sampleKeys = Object.keys(sample).join(', ');
-                                    this.debug(`  Sample player ${samplePlayerId}: ${sampleKeys.substring(0, 80)}...`);
+                                    const sampleKeys = Object.keys(sample);
+                                    this.debug(`  Sample player ${samplePlayerId}: ${sampleKeys.join(', ').substring(0, 150)}`);
 
                                     // Show actual point values if they exist
                                     const pts = sample.pts || sample.pts_ppr || sample.pts_half_ppr || 'N/A';
                                     this.debug(`  Sample points: ${pts}`);
+
+                                    // Show actual values of first few stats to debug structure
+                                    if (week === this.state.currentWeek) {
+                                        this.debug(`  Full sample for debugging:`);
+                                        sampleKeys.slice(0, 10).forEach(key => {
+                                            this.debug(`    ${key}: ${sample[key]}`);
+                                        });
+                                    }
                                 }
                             } else {
                                 this.debug(`⚠ Week ${week}: No projections`, 'warning');
