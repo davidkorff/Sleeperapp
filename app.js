@@ -38,8 +38,8 @@ const App = {
         // Attach event listeners
         this.attachEventListeners();
 
-        // Load user's leagues
-        await this.loadUserLeagues(userId);
+        // Auto-load 2024 leagues
+        await this.loadUserLeagues(userId, '2024');
 
         console.log('Trade Analyzer initialized');
     },
@@ -48,6 +48,11 @@ const App = {
      * Attach event listeners to UI elements
      */
     attachEventListeners() {
+        document.getElementById('loadSeason').addEventListener('click', () => {
+            const season = document.getElementById('seasonSelect').value;
+            const userId = localStorage.getItem('sleeperUserId');
+            this.loadUserLeagues(userId, season);
+        });
         document.getElementById('loadLeague').addEventListener('click', () => this.loadSelectedLeague());
         document.getElementById('addPlayerAway').addEventListener('click', () => this.addPlayerSelect('away'));
         document.getElementById('addPlayerFor').addEventListener('click', () => this.addPlayerSelect('for'));
@@ -83,18 +88,19 @@ const App = {
     /**
      * Load user's leagues
      */
-    async loadUserLeagues(userId) {
+    async loadUserLeagues(userId, season = '2024') {
         try {
             const loadingDiv = document.getElementById('leaguesLoading');
             const leaguesListDiv = document.getElementById('leaguesList');
 
             loadingDiv.style.display = 'block';
+            leaguesListDiv.style.display = 'none';
 
-            // Fetch user leagues for current season
-            const leagues = await SleeperAPI.getUserLeagues(userId, 'nfl', '2024');
+            // Fetch user leagues for specified season
+            const leagues = await SleeperAPI.getUserLeagues(userId, 'nfl', season);
 
             if (!leagues || leagues.length === 0) {
-                this.showError('No leagues found for the 2024 season');
+                this.showError(`No leagues found for the ${season} season`);
                 loadingDiv.style.display = 'none';
                 return;
             }
@@ -106,7 +112,8 @@ const App = {
             leagues.forEach(league => {
                 const option = document.createElement('option');
                 option.value = league.league_id;
-                option.textContent = `${league.name} (${league.total_rosters} teams)`;
+                const season = league.season || '2024';
+                option.textContent = `${league.name} - ${season} (${league.total_rosters} teams)`;
                 option.dataset.league = JSON.stringify(league);
                 leagueSelect.appendChild(option);
             });
@@ -222,16 +229,17 @@ const App = {
             this.state.roster = userRoster;
 
             // Fetch projections for all remaining weeks
+            const leagueSeason = this.state.league.season || '2024';
             this.state.projections = {};
             const projectionPromises = [];
             for (let week = this.state.currentWeek; week <= 18; week++) {
                 projectionPromises.push(
-                    SleeperAPI.getPlayerProjections('2024', week)
+                    SleeperAPI.getPlayerProjections(leagueSeason, week)
                         .then(data => {
                             this.state.projections[week] = data;
                         })
                         .catch(err => {
-                            console.warn(`Failed to fetch projections for week ${week}:`, err);
+                            console.warn(`Failed to fetch projections for ${leagueSeason} week ${week}:`, err);
                             this.state.projections[week] = {};
                         })
                 );
@@ -274,11 +282,16 @@ const App = {
         const leagueDetailsDiv = document.getElementById('leagueDetails');
         const rosterInfoDiv = document.getElementById('rosterInfo');
 
+        const season = this.state.league.season;
+        const currentYear = new Date().getFullYear();
+        const isCurrentSeason = season === currentYear.toString();
+
         leagueDetailsDiv.innerHTML = `
             <h4>${this.state.league.name}</h4>
-            <p><strong>Season:</strong> ${this.state.league.season}</p>
+            <p><strong>Season:</strong> ${season} ${!isCurrentSeason ? '<span style="color: #dc3545; font-weight: bold;">⚠️ NOT CURRENT SEASON</span>' : ''}</p>
             <p><strong>Scoring:</strong> ${this.state.league.scoring_settings?.rec ? 'PPR' : 'Standard'}</p>
             <p><strong>Teams:</strong> ${this.state.league.total_rosters}</p>
+            ${!isCurrentSeason ? '<p style="color: #dc3545;"><strong>Warning:</strong> This league is from ' + season + ', not the current ' + currentYear + ' season!</p>' : ''}
         `;
 
         const rosterSlots = Object.entries(this.state.league.roster_positions)
