@@ -1015,6 +1015,7 @@ const App = {
 
             let tradesAnalyzed = 0;
             let sampleLogged = false;
+            const tradesByTeam = {}; // Group trades by team
 
             // For each team in the league (except ours)
             for (const partnerRoster of this.state.allRosters) {
@@ -1031,6 +1032,9 @@ const App = {
                 })).filter(p => p && p.id);
 
                 this.debug(`\nAnalyzing trades with ${partnerName}...`);
+
+                // Initialize array for this team's trades
+                tradesByTeam[partnerName] = [];
 
                 // Generate all combinations for multi-player trades
                 const myPlayerCombos = {
@@ -1073,7 +1077,7 @@ const App = {
                             // 1. YOU come out ahead (gain points)
                             // 2. They don't lose more than 20 points total (roughly 3 pts/week)
                             if (result.myPointDifference > 0 && result.theirPointDifference > -20) {
-                                allSuggestions.push({
+                                tradesByTeam[partnerName].push({
                                     partnerName,
                                     partnerRoster,
                                     tradingAway: myPlayers,
@@ -1087,46 +1091,43 @@ const App = {
                         }
                     }
                 }
+
+                // Sort this team's trades by same criteria
+                tradesByTeam[partnerName].sort((a, b) => {
+                    // Win-win trades first
+                    if (a.isWinWin && !b.isWinWin) return -1;
+                    if (!a.isWinWin && b.isWinWin) return 1;
+
+                    // Among similar categories, prefer trades where opponent loses less
+                    if (a.isWinWin === b.isWinWin) {
+                        const opponentLossDiff = b.theirPointDifference - a.theirPointDifference;
+                        if (Math.abs(opponentLossDiff) > 5) {
+                            return opponentLossDiff;
+                        }
+                    }
+
+                    // Finally sort by your gain
+                    return b.myPointDifference - a.myPointDifference;
+                });
+
+                // Keep only top 2 trades with this team
+                tradesByTeam[partnerName] = tradesByTeam[partnerName].slice(0, 2);
             }
 
-            // Sort by realism and value:
-            // 1. Prioritize win-win trades (both gain)
-            // 2. Then trades where opponent loses less (more realistic)
-            // 3. Then by your point gain
-            allSuggestions.sort((a, b) => {
-                // Win-win trades first
-                if (a.isWinWin && !b.isWinWin) return -1;
-                if (!a.isWinWin && b.isWinWin) return 1;
-
-                // Among similar categories, prefer trades where opponent loses less
-                if (a.isWinWin === b.isWinWin) {
-                    // Both win-win or both not win-win
-                    const opponentLossDiff = b.theirPointDifference - a.theirPointDifference;
-                    if (Math.abs(opponentLossDiff) > 5) {
-                        return opponentLossDiff; // Prefer higher (less negative) opponent change
-                    }
-                }
-
-                // Finally sort by your gain
-                return b.myPointDifference - a.myPointDifference;
-            });
-
-            // Take top 10
-            const topSuggestions = allSuggestions.slice(0, 10);
+            // Flatten all top trades from each team
+            const topSuggestions = [];
+            let totalWinWin = 0;
+            let totalBeneficial = 0;
+            for (const [teamName, trades] of Object.entries(tradesByTeam)) {
+                topSuggestions.push(...trades);
+                totalWinWin += trades.filter(t => t.isWinWin).length;
+                totalBeneficial += trades.length;
+            }
 
             this.debug(`\nAnalyzed ${tradesAnalyzed} total trades`);
-            this.debug(`Found ${allSuggestions.length} beneficial trades (where you gain points)`);
-            const winWinCount = allSuggestions.filter(s => s.isWinWin).length;
-            this.debug(`Win-Win trades: ${winWinCount}`);
-            this.debug(`Showing top ${topSuggestions.length} suggestions`);
-
-            // Show point range of suggestions
-            if (topSuggestions.length > 0) {
-                this.debug(`Best: +${topSuggestions[0].myPointDifference.toFixed(1)} pts for you`);
-                if (topSuggestions.length > 1) {
-                    this.debug(`10th best: +${topSuggestions[topSuggestions.length - 1].myPointDifference.toFixed(1)} pts for you`);
-                }
-            }
+            this.debug(`Found ${totalBeneficial} realistic trades (top 2 per team)`);
+            this.debug(`Win-Win trades: ${totalWinWin}`);
+            this.debug(`Showing ${topSuggestions.length} total suggestions`);
 
             // Display suggestions
             if (topSuggestions.length === 0) {
