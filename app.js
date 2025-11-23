@@ -26,14 +26,18 @@ const App = {
         console.log(message);
         this.state.debugMessages.push({ message, type, time: new Date().toLocaleTimeString() });
 
-        const debugPanel = document.getElementById('debugPanel');
         const debugContent = document.getElementById('debugContent');
+        const showDebugBtn = document.getElementById('showDebug');
 
-        if (debugPanel && debugContent) {
-            debugPanel.style.display = 'block';
+        if (debugContent) {
             const className = type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'success';
             debugContent.innerHTML += `<div class="${className}">[${new Date().toLocaleTimeString()}] ${message}</div>`;
             debugContent.scrollTop = debugContent.scrollHeight;
+
+            // Show the debug button if there's content
+            if (showDebugBtn && this.state.debugMessages.length > 0) {
+                showDebugBtn.style.display = 'block';
+            }
         }
     },
 
@@ -43,8 +47,17 @@ const App = {
     clearDebug() {
         this.state.debugMessages = [];
         const debugContent = document.getElementById('debugContent');
+        const showDebugBtn = document.getElementById('showDebug');
+        const debugPanel = document.getElementById('debugPanel');
+
         if (debugContent) {
             debugContent.innerHTML = '';
+        }
+        if (showDebugBtn) {
+            showDebugBtn.style.display = 'none';
+        }
+        if (debugPanel) {
+            debugPanel.style.display = 'none';
         }
     },
 
@@ -68,11 +81,22 @@ const App = {
         // Attach event listeners
         this.attachEventListeners();
 
-        // Setup debug panel close button
-        const closeDebug = document.getElementById('closeDebug');
-        if (closeDebug) {
-            closeDebug.addEventListener('click', () => {
-                document.getElementById('debugPanel').style.display = 'none';
+        // Setup debug panel show/hide buttons
+        const showDebugBtn = document.getElementById('showDebug');
+        const closeDebugBtn = document.getElementById('closeDebug');
+        const debugPanel = document.getElementById('debugPanel');
+
+        if (showDebugBtn && debugPanel) {
+            showDebugBtn.addEventListener('click', () => {
+                debugPanel.style.display = 'block';
+                showDebugBtn.style.display = 'none';
+            });
+        }
+
+        if (closeDebugBtn && debugPanel && showDebugBtn) {
+            closeDebugBtn.addEventListener('click', () => {
+                debugPanel.style.display = 'none';
+                showDebugBtn.style.display = 'block';
             });
         }
 
