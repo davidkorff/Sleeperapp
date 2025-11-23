@@ -57,6 +57,28 @@ const LineupOptimizer = {
             const playerId = player.player_id || player.id;
             const projection = playerProjections[playerId];
 
+            // Debug EVERY player lookup for first 5 players
+            if (debugFn && index < 5) {
+                const playerName = player.full_name || (player.first_name && player.last_name ? player.first_name + ' ' + player.last_name : 'Unknown');
+                debugFn(`  Player ${index + 1}: ${playerName}`);
+                debugFn(`    player.id: ${player.id}`);
+                debugFn(`    player.player_id: ${player.player_id}`);
+                debugFn(`    Using ID for lookup: ${playerId}`);
+                debugFn(`    Found projection: ${!!projection}`);
+
+                if (projection) {
+                    debugFn(`    Projection keys: ${Object.keys(projection).slice(0, 10).join(', ')}`);
+                    debugFn(`    Projection.pts: ${projection.pts}`);
+                    debugFn(`    Projection.pts_half_ppr: ${projection.pts_half_ppr}`);
+                    debugFn(`    Projection.pts_ppr: ${projection.pts_ppr}`);
+                } else {
+                    // Check if ANY projection exists with similar ID
+                    const projectionKeys = Object.keys(playerProjections);
+                    debugFn(`    Total projections available: ${projectionKeys.length}`);
+                    debugFn(`    Sample projection IDs: ${projectionKeys.slice(0, 5).join(', ')}`);
+                }
+            }
+
             let points = 0;
             if (projection) {
                 // Try to get pre-calculated points first
@@ -67,14 +89,8 @@ const LineupOptimizer = {
                     points = SleeperAPI.calculateFantasyPoints(projection, scoringSettings);
                 }
 
-                // Debug first player with projection
-                if (debugFn && index === 0 && projection) {
-                    const playerName = player.full_name || player.first_name + ' ' + player.last_name || 'Unknown';
-                    debugFn(`  First player: ${playerName}, ID: ${playerId}`);
-                    debugFn(`    Has projection: ${!!projection}`);
-                    debugFn(`    Projection.pts: ${projection.pts}`);
-                    debugFn(`    Projection.pts_half_ppr: ${projection.pts_half_ppr}`);
-                    debugFn(`    Projection.pts_ppr: ${projection.pts_ppr}`);
+                // Debug calculated points for first 5 players
+                if (debugFn && index < 5) {
                     debugFn(`    Calculated points: ${points}`);
                 }
             }
