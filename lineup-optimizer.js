@@ -53,7 +53,7 @@ const LineupOptimizer = {
         const positions = this.parseRosterPositions(rosterPositions);
 
         // Add projections to players
-        const playersWithPoints = players.map(player => {
+        const playersWithPoints = players.map((player, index) => {
             const playerId = player.player_id || player.id;
             const projection = playerProjections[playerId];
 
@@ -65,6 +65,17 @@ const LineupOptimizer = {
                 // If no pre-calculated points and we have scoring settings, calculate from stats
                 if (points === 0 && scoringSettings && typeof SleeperAPI !== 'undefined') {
                     points = SleeperAPI.calculateFantasyPoints(projection, scoringSettings);
+                }
+
+                // Debug first player with projection
+                if (debugFn && index === 0 && projection) {
+                    const playerName = player.full_name || player.first_name + ' ' + player.last_name || 'Unknown';
+                    debugFn(`  First player: ${playerName}, ID: ${playerId}`);
+                    debugFn(`    Has projection: ${!!projection}`);
+                    debugFn(`    Projection.pts: ${projection.pts}`);
+                    debugFn(`    Projection.pts_half_ppr: ${projection.pts_half_ppr}`);
+                    debugFn(`    Projection.pts_ppr: ${projection.pts_ppr}`);
+                    debugFn(`    Calculated points: ${points}`);
                 }
             }
 
