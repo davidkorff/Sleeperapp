@@ -186,15 +186,38 @@ const App = {
             this.state.leagueUsers = leagueUsers;
             this.state.players = allPlayers;
 
+            // Debug logging
+            console.log('User ID from localStorage:', userId);
+            console.log('All rosters:', allRosters);
+            console.log('League users:', leagueUsers);
+
             // Find user's roster
             const userRoster = allRosters.find(r => r.owner_id === userId);
-            if (!userRoster) throw new Error('User roster not found');
+
+            if (!userRoster) {
+                console.error('User roster not found!');
+                console.error('Looking for owner_id:', userId);
+                console.error('Available owner_ids:', allRosters.map(r => r.owner_id));
+                throw new Error(`User roster not found. Your user ID (${userId}) doesn't match any roster owner in this league.`);
+            }
+
+            console.log('Found user roster:', userRoster);
+            console.log('User roster player IDs:', userRoster.players);
 
             // Enrich user roster with player details
-            userRoster.playerDetails = (userRoster.players || []).map(playerId => ({
-                id: playerId,
-                ...allPlayers[playerId]
-            })).filter(p => p.id);
+            userRoster.playerDetails = (userRoster.players || []).map(playerId => {
+                const playerData = allPlayers[playerId];
+                if (!playerData) {
+                    console.warn('Player not found in database:', playerId);
+                    return null;
+                }
+                return {
+                    id: playerId,
+                    ...playerData
+                };
+            }).filter(p => p && p.id);
+
+            console.log('Enriched player details:', userRoster.playerDetails);
 
             this.state.roster = userRoster;
 
@@ -217,6 +240,9 @@ const App = {
 
             // Display league info
             this.displayLeagueInfo();
+
+            // Populate team selector
+            this.populateTeamSelector();
 
             // Populate trading partner dropdown
             this.populateTradingPartners();
@@ -266,6 +292,109 @@ const App = {
         `;
 
         leagueInfoDiv.style.display = 'block';
+    },
+
+    /**
+     * Populate team selector dropdown
+     */
+    populateTeamSelector() {
+        const select = document.getElementById('userTeamSelect');
+        select.innerHTML = '';
+
+        // Add all teams to dropdown
+        const allTeams = this.state.allRosters.map(roster => {
+            const user = this.state.leagueUsers.find(u => u.user_id === roster.owner_id);
+            const teamName = user?.metadata?.team_name || user?.display_name || 'Unknown Team';
+            const username = user?.display_name || user?.username || 'Unknown User';
+
+            return {
+                rosterId: roster.roster_id,
+                ownerId: roster.owner_id,
+                teamName,
+                username,
+                roster,
+                playerCount: roster.players?.length || 0
+            };
+        }).sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+        allTeams.forEach(team => {
+            const option = document.createElement('option');
+            option.value = team.rosterId;
+            option.textContent = `${team.teamName} (@${team.username}) - ${team.playerCount} players`;
+            option.dataset.team = JSON.stringify(team);
+            if (team.rosterId === this.state.roster.roster_id) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        // Display current team info
+        this.displayCurrentTeam();
+
+        // Add change team button handler
+        document.getElementById('changeTeam').onclick = () => this.changeUserTeam();
+    },
+
+    /**
+     * Display current team information
+     */
+    displayCurrentTeam() {
+        const currentUser = this.state.leagueUsers.find(u => u.user_id === this.state.roster.owner_id);
+        const teamName = currentUser?.metadata?.team_name || currentUser?.display_name || 'Unknown Team';
+        const username = currentUser?.display_name || currentUser?.username || 'Unknown User';
+
+        const displayDiv = document.getElementById('currentTeamDisplay');
+        displayDiv.innerHTML = `
+            <div style="padding: 15px; background: #e7f3ff; border-left: 4px solid #667eea; border-radius: 6px;">
+                <strong>Currently analyzing:</strong> ${teamName} (@${username})<br>
+                <strong>Players on roster:</strong> ${this.state.roster.playerDetails?.length || 0}<br>
+                <div style="margin-top: 10px; font-size: 0.9em;">
+                    ${this.state.roster.playerDetails?.slice(0, 5).map(p =>
+                        `<div>• ${p.full_name || p.first_name + ' ' + p.last_name} (${p.position || 'N/A'})</div>`
+                    ).join('') || '<div>No players found</div>'}
+                    ${this.state.roster.playerDetails?.length > 5 ? '<div>• ... and more</div>' : ''}
+                </div>
+            </div>
+        `;
+    },
+
+    /**
+     * Change user's team selection
+     */
+    changeUserTeam() {
+        const select = document.getElementById('userTeamSelect');
+        const selectedOption = select.options[select.selectedIndex];
+        if (!selectedOption || !selectedOption.value) return;
+
+        const team = JSON.parse(selectedOption.dataset.team);
+
+        // Enrich roster with player details
+        const roster = team.roster;
+        roster.playerDetails = (roster.players || []).map(playerId => {
+            const playerData = this.state.players[playerId];
+            if (!playerData) {
+                console.warn('Player not found in database:', playerId);
+                return null;
+            }
+            return {
+                id: playerId,
+                ...playerData
+            };
+        }).filter(p => p && p.id);
+
+        this.state.roster = roster;
+
+        // Update display
+        this.displayCurrentTeam();
+
+        // Clear trade selections
+        document.getElementById('tradingAway').innerHTML = '';
+        this.addPlayerSelect('away');
+
+        // Reset results
+        document.getElementById('results').style.display = 'none';
+
+        alert(`Team updated to: ${team.teamName}`);
     },
 
     /**

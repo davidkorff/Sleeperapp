@@ -46,6 +46,17 @@
             <h3>League Information</h3>
             <div id="leagueDetails"></div>
             <div id="rosterInfo"></div>
+            <div id="teamSelector" class="team-selector-section">
+                <h4>Your Team</h4>
+                <div class="form-group">
+                    <label for="userTeamSelect">Select your team if incorrect:</label>
+                    <select id="userTeamSelect" class="league-select">
+                        <option value="">Loading...</option>
+                    </select>
+                    <button id="changeTeam" class="btn-secondary" style="margin-top: 10px;">Update My Team</button>
+                </div>
+                <div id="currentTeamDisplay" style="margin-top: 15px;"></div>
+            </div>
         </div>
 
         <div id="tradeSection" class="trade-section" style="display: none;">

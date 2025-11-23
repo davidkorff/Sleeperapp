@@ -190,6 +190,19 @@ select:focus,
     margin-bottom: 10px;
 }
 
+.team-selector-section {
+    margin-top: 20px;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+}
+
+.team-selector-section h4 {
+    color: #667eea;
+    margin-bottom: 15px;
+}
+
 .trade-arrow {
     font-size: 3em;
     color: #667eea;
