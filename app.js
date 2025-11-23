@@ -247,6 +247,12 @@ const App = {
                     SleeperAPI.getPlayerProjections(leagueSeason, week)
                         .then(data => {
                             this.state.projections[week] = data;
+                            console.log(`Projections for week ${week}:`, data);
+                            // Log a sample projection to see format
+                            const samplePlayerId = Object.keys(data)[0];
+                            if (samplePlayerId) {
+                                console.log(`Sample projection for player ${samplePlayerId}:`, data[samplePlayerId]);
+                            }
                         })
                         .catch(err => {
                             console.warn(`Failed to fetch projections for ${leagueSeason} week ${week}:`, err);
@@ -601,16 +607,24 @@ const App = {
             let totalCurrentPoints = 0;
             let totalNewPoints = 0;
 
+            // Get scoring settings from league
+            const scoringSettings = this.state.league.scoring_settings || {};
+            console.log('League scoring settings:', scoringSettings);
+
             for (let week = this.state.currentWeek; week <= 18; week++) {
                 const weekProjections = this.state.projections[week] || {};
+                console.log(`Analyzing trade for week ${week} with ${Object.keys(weekProjections).length} player projections`);
 
                 const analysis = LineupOptimizer.analyzeTrade(
                     this.state.roster.playerDetails,
                     tradingAway,
                     tradingFor,
                     rosterPositions,
-                    weekProjections
+                    weekProjections,
+                    scoringSettings
                 );
+
+                console.log(`Week ${week} analysis:`, analysis);
 
                 weeklyAnalysis.push({
                     week,

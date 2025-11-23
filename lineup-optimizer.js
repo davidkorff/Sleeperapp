@@ -49,13 +49,26 @@ const LineupOptimizer = {
      * Optimize lineup to maximize points
      * Uses a greedy algorithm with backtracking for FLEX positions
      */
-    optimizeLineup(players, rosterPositions, playerProjections) {
+    optimizeLineup(players, rosterPositions, playerProjections, scoringSettings = null) {
         const positions = this.parseRosterPositions(rosterPositions);
 
         // Add projections to players
         const playersWithPoints = players.map(player => {
-            const projection = playerProjections[player.player_id] || playerProjections[player.id];
-            const points = projection ? projection.pts || projection.pts_half_ppr || projection.pts_ppr || 0 : 0;
+            const playerId = player.player_id || player.id;
+            const projection = playerProjections[playerId];
+
+            let points = 0;
+            if (projection) {
+                // Try to get pre-calculated points first
+                points = projection.pts || projection.pts_half_ppr || projection.pts_ppr || 0;
+
+                // If no pre-calculated points and we have scoring settings, calculate from stats
+                if (points === 0 && scoringSettings && typeof SleeperAPI !== 'undefined') {
+                    points = SleeperAPI.calculateFantasyPoints(projection, scoringSettings);
+                }
+            }
+
+            console.log(`Player ${player.full_name || player.first_name + ' ' + player.last_name} (${playerId}): ${points} pts`, projection);
 
             return {
                 ...player,
@@ -197,7 +210,7 @@ const LineupOptimizer = {
     /**
      * Simulate trade and compare lineups
      */
-    analyzeTrade(currentRoster, tradingAway, tradingFor, rosterPositions, playerProjections) {
+    analyzeTrade(currentRoster, tradingAway, tradingFor, rosterPositions, playerProjections, scoringSettings = null) {
         // Create new roster after trade
         const newRoster = currentRoster.filter(player => {
             const playerId = player.id || player.player_id;
@@ -208,8 +221,8 @@ const LineupOptimizer = {
         newRoster.push(...tradingFor);
 
         // Optimize both lineups
-        const currentLineup = this.optimizeLineup(currentRoster, rosterPositions, playerProjections);
-        const newLineup = this.optimizeLineup(newRoster, rosterPositions, playerProjections);
+        const currentLineup = this.optimizeLineup(currentRoster, rosterPositions, playerProjections, scoringSettings);
+        const newLineup = this.optimizeLineup(newRoster, rosterPositions, playerProjections, scoringSettings);
 
         // Compare lineups
         return {
