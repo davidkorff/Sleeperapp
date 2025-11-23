@@ -17,8 +17,26 @@ const App = {
     /**
      * Initialize the application
      */
-    init() {
+    async init() {
+        // Check if user is logged in
+        const username = localStorage.getItem('sleeperUsername');
+        const userId = localStorage.getItem('sleeperUserId');
+
+        if (!username || !userId) {
+            // Redirect to login page
+            window.location.href = '/';
+            return;
+        }
+
+        // Display user info
+        document.getElementById('userDisplay').textContent = `@${username}`;
+
+        // Attach event listeners
         this.attachEventListeners();
+
+        // Load user's leagues
+        await this.loadUserLeagues(userId);
+
         console.log('Trade Analyzer initialized');
     },
 
@@ -26,10 +44,61 @@ const App = {
      * Attach event listeners to UI elements
      */
     attachEventListeners() {
-        document.getElementById('loadLeague').addEventListener('click', () => this.loadLeague());
+        document.getElementById('loadLeague').addEventListener('click', () => this.loadSelectedLeague());
         document.getElementById('addPlayerAway').addEventListener('click', () => this.addPlayerSelect('away'));
         document.getElementById('addPlayerFor').addEventListener('click', () => this.addPlayerSelect('for'));
         document.getElementById('analyzeTrade').addEventListener('click', () => this.analyzeTrade());
+        document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
+    },
+
+    /**
+     * Logout user
+     */
+    logout() {
+        localStorage.removeItem('sleeperUsername');
+        localStorage.removeItem('sleeperUserId');
+        localStorage.removeItem('sleeperUserData');
+        window.location.href = '/';
+    },
+
+    /**
+     * Load user's leagues
+     */
+    async loadUserLeagues(userId) {
+        try {
+            const loadingDiv = document.getElementById('leaguesLoading');
+            const leaguesListDiv = document.getElementById('leaguesList');
+
+            loadingDiv.style.display = 'block';
+
+            // Fetch user leagues for current season
+            const leagues = await SleeperAPI.getUserLeagues(userId, 'nfl', '2024');
+
+            if (!leagues || leagues.length === 0) {
+                this.showError('No leagues found for the 2024 season');
+                loadingDiv.style.display = 'none';
+                return;
+            }
+
+            // Populate league selector
+            const leagueSelect = document.getElementById('leagueSelect');
+            leagueSelect.innerHTML = '<option value="">Select a league...</option>';
+
+            leagues.forEach(league => {
+                const option = document.createElement('option');
+                option.value = league.league_id;
+                option.textContent = `${league.name} (${league.total_rosters} teams)`;
+                option.dataset.league = JSON.stringify(league);
+                leagueSelect.appendChild(option);
+            });
+
+            loadingDiv.style.display = 'none';
+            leaguesListDiv.style.display = 'block';
+
+        } catch (error) {
+            console.error('Error loading leagues:', error);
+            this.showError('Failed to load your leagues. Please try again.');
+        }
     },
 
     /**
@@ -53,29 +122,34 @@ const App = {
     },
 
     /**
-     * Load league data
+     * Load selected league data
      */
-    async loadLeague() {
+    async loadSelectedLeague() {
         try {
             this.setLoading(true);
 
-            const username = document.getElementById('username').value.trim();
-            const leagueId = document.getElementById('leagueId').value.trim();
+            const leagueSelect = document.getElementById('leagueSelect');
+            const selectedOption = leagueSelect.options[leagueSelect.selectedIndex];
+            const leagueId = leagueSelect.value;
             const week = parseInt(document.getElementById('week').value);
+            const userId = localStorage.getItem('sleeperUserId');
 
-            if (!username || !leagueId) {
-                this.showError('Please enter both username and league ID');
+            if (!leagueId) {
+                this.showError('Please select a league');
+                this.setLoading(false);
                 return;
             }
 
-            // Fetch user data
-            this.state.user = await SleeperAPI.getUser(username);
+            // Get league data from the selected option
+            const leagueData = JSON.parse(selectedOption.dataset.league);
+            this.state.league = leagueData;
 
-            // Fetch league data
-            this.state.league = await SleeperAPI.getLeague(leagueId);
+            // Fetch detailed league info (for scoring settings)
+            const detailedLeague = await SleeperAPI.getLeague(leagueId);
+            this.state.league = { ...leagueData, ...detailedLeague };
 
             // Fetch user's roster with player details
-            this.state.roster = await SleeperAPI.getUserRosterWithDetails(leagueId, this.state.user.user_id);
+            this.state.roster = await SleeperAPI.getUserRosterWithDetails(leagueId, userId);
 
             // Fetch all players
             this.state.players = await SleeperAPI.getAllPlayers();

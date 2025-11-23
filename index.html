@@ -9,25 +9,37 @@
 <body>
     <div class="container">
         <header>
-            <h1>Sleeper Fantasy Trade Analyzer</h1>
-            <p class="subtitle">Analyze trades based on actual playable scenarios</p>
+            <div class="header-content">
+                <div>
+                    <h1>Sleeper Fantasy Trade Analyzer</h1>
+                    <p class="subtitle">Analyze trades based on actual playable scenarios</p>
+                </div>
+                <div class="user-info">
+                    <span id="userDisplay"></span>
+                    <button id="logoutBtn" class="btn-logout">Logout</button>
+                </div>
+            </div>
         </header>
 
         <div class="setup-section">
-            <h2>League Setup</h2>
-            <div class="form-group">
-                <label for="username">Your Sleeper Username:</label>
-                <input type="text" id="username" placeholder="Enter your username">
+            <h2>Select League</h2>
+            <div id="leaguesLoading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading your leagues...</p>
             </div>
-            <div class="form-group">
-                <label for="leagueId">League ID:</label>
-                <input type="text" id="leagueId" placeholder="Enter league ID">
+            <div id="leaguesList" style="display: none;">
+                <div class="form-group">
+                    <label for="leagueSelect">Choose a league:</label>
+                    <select id="leagueSelect" class="league-select">
+                        <option value="">Select a league...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="week">Week (for projections):</label>
+                    <input type="number" id="week" value="1" min="1" max="18">
+                </div>
+                <button id="loadLeague" class="btn-primary">Load Selected League</button>
             </div>
-            <div class="form-group">
-                <label for="week">Week (for projections):</label>
-                <input type="number" id="week" value="1" min="1" max="18">
-            </div>
-            <button id="loadLeague" class="btn-primary">Load League</button>
         </div>
 
         <div id="leagueInfo" class="info-section" style="display: none;">

@@ -18,28 +18,31 @@ Traditional trade analyzers simply compare the total points of players involved.
 - **Clear Recommendations** - Get instant feedback on whether to accept or decline
 - **Support for All Formats** - Works with PPR, Half-PPR, Standard, and custom scoring
 - **FLEX Position Handling** - Properly optimizes FLEX, SUPER_FLEX, and REC_FLEX positions
+- **One-Click Login** - Save your Sleeper username and auto-load your leagues
+- **Session Persistence** - Stay logged in across browser sessions
+
+## Live Demo
+
+Visit the hosted version at: **[Your Vercel URL]** (see [DEPLOYMENT.md](DEPLOYMENT.md) for deployment instructions)
 
 ## How to Use
 
-### 1. Get Your League Information
+### 1. Login with Your Sleeper Username
 
-You'll need:
-- Your Sleeper username
-- Your league ID (found in the URL when viewing your league on Sleeper)
-- The week number you want to analyze (1-18)
+1. Visit the app (either locally or deployed version)
+2. Enter your Sleeper username
+3. Click "Continue to Analyzer"
+4. Your leagues will automatically load
 
-### 2. Open the Analyzer
+**Note:** Your username is verified against the Sleeper API and stored locally in your browser. We never send your data anywhere.
 
-Simply open `index.html` in your web browser. No installation or server required!
+### 2. Select Your League
 
-### 3. Load Your League
+1. Choose one of your leagues from the dropdown
+2. Select the week you want to analyze (1-18)
+3. Click "Load Selected League"
 
-1. Enter your Sleeper username
-2. Enter your league ID
-3. Select the week you want to analyze
-4. Click "Load League"
-
-### 4. Set Up the Trade
+### 3. Set Up the Trade
 
 - **Left Column (Trading Away)** - Select players you would give up
 - **Right Column (Trading For)** - Select players you would receive
@@ -124,11 +127,15 @@ Works in all modern browsers:
 
 ## Files
 
-- `index.html` - Main interface
+- `login.html` - Login page for entering Sleeper username
+- `index.html` - Main trade analyzer interface
 - `styles.css` - Styling and layout
 - `sleeper-api.js` - Sleeper API integration
 - `lineup-optimizer.js` - Lineup optimization algorithm
-- `app.js` - Main application logic
+- `app.js` - Main application logic with session management
+- `vercel.json` - Vercel deployment configuration
+- `package.json` - Project metadata
+- `DEPLOYMENT.md` - Deployment guide for Vercel
 
 ## Troubleshooting
 
