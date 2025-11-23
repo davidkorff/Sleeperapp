@@ -1036,14 +1036,44 @@ const App = {
                 // Initialize array for this team's trades
                 tradesByTeam[partnerName] = [];
 
-                // Generate all combinations for multi-player trades
+                // Filter out injured/inactive players before generating trades
+                const isPlayerAvailable = (player) => {
+                    // Filter out players on IR or with season-ending injuries
+                    const injuryStatus = player.injury_status?.toLowerCase();
+                    if (injuryStatus === 'ir' || injuryStatus === 'pup' || injuryStatus === 'sus') {
+                        return false;
+                    }
+
+                    // Filter out inactive players (rookies not signed, etc.)
+                    if (player.status === 'Inactive') {
+                        return false;
+                    }
+
+                    // Filter out players with no team (free agents who got cut)
+                    if (!player.team) {
+                        return false;
+                    }
+
+                    return true;
+                };
+
+                const myAvailablePlayers = this.state.roster.playerDetails.filter(isPlayerAvailable);
+                const theirAvailablePlayers = partnerPlayers.filter(isPlayerAvailable);
+
+                const myFiltered = this.state.roster.playerDetails.length - myAvailablePlayers.length;
+                const theirFiltered = partnerPlayers.length - theirAvailablePlayers.length;
+                if (myFiltered > 0 || theirFiltered > 0) {
+                    this.debug(`  Filtered ${myFiltered} injured/inactive from your roster, ${theirFiltered} from theirs`);
+                }
+
+                // Generate all combinations for multi-player trades (only with healthy players)
                 const myPlayerCombos = {
-                    '1': this.state.roster.playerDetails.map(p => [p]),
-                    '2': this.getCombinations(this.state.roster.playerDetails, 2)
+                    '1': myAvailablePlayers.map(p => [p]),
+                    '2': this.getCombinations(myAvailablePlayers, 2)
                 };
                 const theirPlayerCombos = {
-                    '1': partnerPlayers.map(p => [p]),
-                    '2': this.getCombinations(partnerPlayers, 2)
+                    '1': theirAvailablePlayers.map(p => [p]),
+                    '2': this.getCombinations(theirAvailablePlayers, 2)
                 };
 
                 // Analyze all trade scenarios
