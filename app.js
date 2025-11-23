@@ -865,6 +865,65 @@ const App = {
     },
 
     /**
+     * Generate combinations of n items from an array
+     */
+    getCombinations(array, n) {
+        if (n === 1) return array.map(item => [item]);
+        if (n > array.length) return [];
+
+        const combinations = [];
+        for (let i = 0; i <= array.length - n; i++) {
+            const head = array[i];
+            const tailCombos = this.getCombinations(array.slice(i + 1), n - 1);
+            for (const tailCombo of tailCombos) {
+                combinations.push([head, ...tailCombo]);
+            }
+        }
+        return combinations;
+    },
+
+    /**
+     * Analyze a single trade scenario
+     */
+    analyzeTradeScenario(myPlayers, theirPlayers, rosterPositions, scoringSettings, sampleLogged) {
+        let totalCurrentPoints = 0;
+        let totalNewPoints = 0;
+        let firstWeekLogged = sampleLogged;
+
+        for (let week = this.state.currentWeek; week <= 18; week++) {
+            const weekProjections = this.state.projections[week] || {};
+
+            const analysis = LineupOptimizer.analyzeTrade(
+                this.state.roster.playerDetails,
+                myPlayers,
+                theirPlayers,
+                rosterPositions,
+                weekProjections,
+                scoringSettings
+            );
+
+            totalCurrentPoints += analysis.current.totalPoints;
+            totalNewPoints += analysis.new.totalPoints;
+
+            // Log first trade calculation details
+            if (!firstWeekLogged && week === this.state.currentWeek) {
+                const myPlayerNames = myPlayers.map(p => p.full_name || p.first_name + ' ' + p.last_name).join(', ');
+                const theirPlayerNames = theirPlayers.map(p => p.full_name || p.first_name + ' ' + p.last_name).join(', ');
+                this.debug(`\nSample trade: ${myPlayerNames} for ${theirPlayerNames}`);
+                this.debug(`  Week ${week}: Current ${analysis.current.totalPoints.toFixed(2)}, New ${analysis.new.totalPoints.toFixed(2)}`);
+                firstWeekLogged = true;
+            }
+        }
+
+        return {
+            totalCurrentPoints,
+            totalNewPoints,
+            pointDifference: totalNewPoints - totalCurrentPoints,
+            sampleLogged: firstWeekLogged
+        };
+    },
+
+    /**
      * Generate trade suggestions
      */
     async generateTradeSuggestions() {
@@ -916,68 +975,57 @@ const App = {
                     ...this.state.players[playerId]
                 })).filter(p => p && p.id);
 
-                // Try 1-for-1 trades with each of their players
-                for (const theirPlayer of partnerPlayers) {
-                    for (const myPlayer of this.state.roster.playerDetails) {
-                        // Calculate impact for all weeks
-                        let totalCurrentPoints = 0;
-                        let totalNewPoints = 0;
+                this.debug(`\nAnalyzing trades with ${partnerName}...`);
 
-                        for (let week = this.state.currentWeek; week <= 18; week++) {
-                            const weekProjections = this.state.projections[week] || {};
+                // Generate all combinations for multi-player trades
+                const myPlayerCombos = {
+                    '1': this.state.roster.playerDetails.map(p => [p]),
+                    '2': this.getCombinations(this.state.roster.playerDetails, 2)
+                };
+                const theirPlayerCombos = {
+                    '1': partnerPlayers.map(p => [p]),
+                    '2': this.getCombinations(partnerPlayers, 2)
+                };
 
-                            const analysis = LineupOptimizer.analyzeTrade(
-                                this.state.roster.playerDetails,
-                                [myPlayer],
-                                [theirPlayer],
+                // Analyze all trade scenarios
+                // 1-for-1, 2-for-1, 1-for-2, 2-for-2
+                const tradeTypes = [
+                    { give: '1', get: '1', name: '1-for-1' },
+                    { give: '2', get: '1', name: '2-for-1' },
+                    { give: '1', get: '2', name: '1-for-2' },
+                    { give: '2', get: '2', name: '2-for-2' }
+                ];
+
+                for (const tradeType of tradeTypes) {
+                    const myPlayersList = myPlayerCombos[tradeType.give] || [];
+                    const theirPlayersList = theirPlayerCombos[tradeType.get] || [];
+
+                    for (const myPlayers of myPlayersList) {
+                        for (const theirPlayers of theirPlayersList) {
+                            const result = this.analyzeTradeScenario(
+                                myPlayers,
+                                theirPlayers,
                                 rosterPositions,
-                                weekProjections,
-                                scoringSettings
+                                scoringSettings,
+                                sampleLogged
                             );
 
-                            totalCurrentPoints += analysis.current.totalPoints;
-                            totalNewPoints += analysis.new.totalPoints;
+                            sampleLogged = result.sampleLogged;
+                            tradesAnalyzed++;
 
-                            // Log first trade calculation details
-                            if (!sampleLogged && week === this.state.currentWeek) {
-                                const myPlayerName = myPlayer.full_name || myPlayer.first_name + ' ' + myPlayer.last_name;
-                                const theirPlayerName = theirPlayer.full_name || theirPlayer.first_name + ' ' + theirPlayer.last_name;
-                                this.debug(`\nSample trade: ${myPlayerName} for ${theirPlayerName}`);
-                                this.debug(`  Week ${week}: Current ${analysis.current.totalPoints.toFixed(2)}, New ${analysis.new.totalPoints.toFixed(2)}`);
-
-                                // Check projections for these specific players
-                                const myPlayerId = myPlayer.id || myPlayer.player_id;
-                                const theirPlayerId = theirPlayer.id || theirPlayer.player_id;
-                                const myProj = weekProjections[myPlayerId];
-                                const theirProj = weekProjections[theirPlayerId];
-                                this.debug(`  My player projection exists: ${!!myProj}`);
-                                this.debug(`  Their player projection exists: ${!!theirProj}`);
-                                if (myProj) {
-                                    const pts = myProj.pts || myProj.pts_ppr || myProj.pts_half_ppr || 'no pts field';
-                                    this.debug(`  My player pts: ${pts}`);
-                                }
-                                if (theirProj) {
-                                    const pts = theirProj.pts || theirProj.pts_ppr || theirProj.pts_half_ppr || 'no pts field';
-                                    this.debug(`  Their player pts: ${pts}`);
-                                }
-                                sampleLogged = true;
+                            // Only keep beneficial trades (or slightly negative for variety)
+                            if (result.pointDifference > -10) {
+                                allSuggestions.push({
+                                    partnerName,
+                                    partnerRoster,
+                                    tradingAway: myPlayers,
+                                    tradingFor: theirPlayers,
+                                    pointDifference: result.pointDifference,
+                                    currentPoints: result.totalCurrentPoints,
+                                    newPoints: result.totalNewPoints,
+                                    tradeType: tradeType.name
+                                });
                             }
-                        }
-
-                        tradesAnalyzed++;
-                        const pointDifference = totalNewPoints - totalCurrentPoints;
-
-                        // Only keep beneficial trades (or slightly negative for variety)
-                        if (pointDifference > -5) {
-                            allSuggestions.push({
-                                partnerName,
-                                partnerRoster,
-                                tradingAway: [myPlayer],
-                                tradingFor: [theirPlayer],
-                                pointDifference,
-                                currentPoints: totalCurrentPoints,
-                                newPoints: totalNewPoints
-                            });
                         }
                     }
                 }
@@ -1006,13 +1054,24 @@ const App = {
                 suggestionsList.innerHTML = '<p style="text-align: center; color: #666;">No beneficial trade suggestions found. Your team is optimized!</p>';
             } else {
                 suggestionsList.innerHTML = topSuggestions.map((suggestion, index) => {
-                    const myPlayer = suggestion.tradingAway[0];
-                    const theirPlayer = suggestion.tradingFor[0];
+                    const tradingAwayHTML = suggestion.tradingAway.map(p => `
+                        <div class="player-item">
+                            <span class="player-name">${p.full_name || p.first_name + ' ' + p.last_name}</span>
+                            <span class="player-position">${p.position || ''} - ${p.team || ''}</span>
+                        </div>
+                    `).join('');
+
+                    const tradingForHTML = suggestion.tradingFor.map(p => `
+                        <div class="player-item">
+                            <span class="player-name">${p.full_name || p.first_name + ' ' + p.last_name}</span>
+                            <span class="player-position">${p.position || ''} - ${p.team || ''}</span>
+                        </div>
+                    `).join('');
 
                     return `
                         <div class="suggestion-card">
                             <div class="suggestion-header">
-                                <div class="suggestion-rank">#${index + 1} Best Trade</div>
+                                <div class="suggestion-rank">#${index + 1} Best Trade (${suggestion.tradeType})</div>
                                 <div class="suggestion-impact ${suggestion.pointDifference < 0 ? 'negative' : ''}">
                                     ${suggestion.pointDifference > 0 ? '+' : ''}${suggestion.pointDifference.toFixed(1)} pts
                                 </div>
@@ -1021,20 +1080,14 @@ const App = {
                             <div class="suggestion-trade">
                                 <div class="suggestion-players">
                                     <h4>You Trade Away</h4>
-                                    <div class="player-item">
-                                        <span class="player-name">${myPlayer.full_name || myPlayer.first_name + ' ' + myPlayer.last_name}</span>
-                                        <span class="player-position">${myPlayer.position || ''} - ${myPlayer.team || ''}</span>
-                                    </div>
+                                    ${tradingAwayHTML}
                                 </div>
 
                                 <div class="trade-arrow-suggestion">⇄</div>
 
                                 <div class="suggestion-players">
                                     <h4>You Receive</h4>
-                                    <div class="player-item">
-                                        <span class="player-name">${theirPlayer.full_name || theirPlayer.first_name + ' ' + theirPlayer.last_name}</span>
-                                        <span class="player-position">${theirPlayer.position || ''} - ${theirPlayer.team || ''}</span>
-                                    </div>
+                                    ${tradingForHTML}
                                 </div>
                             </div>
 
@@ -1103,20 +1156,26 @@ const App = {
             // Wait for partner selection to update UI
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Add players
-            this.addPlayerSelect('away');
-            this.addPlayerSelect('for');
-
-            // Set the selected players
-            const awaySelect = document.querySelector('#tradingAway select');
-            const forSelect = document.querySelector('#tradingFor select');
-
-            if (awaySelect) {
-                awaySelect.value = suggestion.tradingAway[0].id || suggestion.tradingAway[0].player_id;
+            // Add and set all players we're trading away
+            for (const player of suggestion.tradingAway) {
+                this.addPlayerSelect('away');
+                await new Promise(resolve => setTimeout(resolve, 50));
+                const awaySelects = document.querySelectorAll('#tradingAway select');
+                const lastAwaySelect = awaySelects[awaySelects.length - 1];
+                if (lastAwaySelect) {
+                    lastAwaySelect.value = player.id || player.player_id;
+                }
             }
 
-            if (forSelect) {
-                forSelect.value = suggestion.tradingFor[0].id || suggestion.tradingFor[0].player_id;
+            // Add and set all players we're getting
+            for (const player of suggestion.tradingFor) {
+                this.addPlayerSelect('for');
+                await new Promise(resolve => setTimeout(resolve, 50));
+                const forSelects = document.querySelectorAll('#tradingFor select');
+                const lastForSelect = forSelects[forSelects.length - 1];
+                if (lastForSelect) {
+                    lastForSelect.value = player.id || player.player_id;
+                }
             }
 
             // Auto-analyze
