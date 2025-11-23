@@ -993,8 +993,16 @@ const App = {
                 return;
             }
 
-            // Get roster positions
+            // Get roster positions from league settings
             const rosterPositions = {};
+            this.state.league.roster_positions.forEach((pos, index) => {
+                const positionName = this.state.league.roster_positions[index];
+                if (positionName) {
+                    rosterPositions[positionName] = (rosterPositions[positionName] || 0) + 1;
+                }
+            });
+
+            // If roster_positions is an object already
             if (typeof this.state.league.roster_positions === 'object' && !Array.isArray(this.state.league.roster_positions)) {
                 Object.assign(rosterPositions, this.state.league.roster_positions);
             }
