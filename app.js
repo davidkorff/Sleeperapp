@@ -877,6 +877,16 @@ const App = {
 
             this.debug('\n=== GENERATING TRADE SUGGESTIONS ===');
 
+            // Verify projections are loaded
+            const totalProjections = Object.values(this.state.projections).reduce((sum, week) => sum + Object.keys(week).length, 0);
+            this.debug(`Available projections: ${totalProjections}`);
+
+            if (totalProjections === 0) {
+                this.showError('No projections loaded. Please load your league first.');
+                suggestionsLoading.style.display = 'none';
+                return;
+            }
+
             // Get roster positions
             const rosterPositions = {};
             if (typeof this.state.league.roster_positions === 'object' && !Array.isArray(this.state.league.roster_positions)) {
@@ -885,6 +895,12 @@ const App = {
 
             const scoringSettings = this.state.league.scoring_settings || {};
             const allSuggestions = [];
+
+            this.debug(`My roster: ${this.state.roster.playerDetails.length} players`);
+            this.debug(`Other teams: ${this.state.allRosters.length - 1} teams`);
+
+            let tradesAnalyzed = 0;
+            let sampleLogged = false;
 
             // For each team in the league (except ours)
             for (const partnerRoster of this.state.allRosters) {
@@ -921,8 +937,34 @@ const App = {
 
                             totalCurrentPoints += analysis.current.totalPoints;
                             totalNewPoints += analysis.new.totalPoints;
+
+                            // Log first trade calculation details
+                            if (!sampleLogged && week === this.state.currentWeek) {
+                                const myPlayerName = myPlayer.full_name || myPlayer.first_name + ' ' + myPlayer.last_name;
+                                const theirPlayerName = theirPlayer.full_name || theirPlayer.first_name + ' ' + theirPlayer.last_name;
+                                this.debug(`\nSample trade: ${myPlayerName} for ${theirPlayerName}`);
+                                this.debug(`  Week ${week}: Current ${analysis.current.totalPoints.toFixed(2)}, New ${analysis.new.totalPoints.toFixed(2)}`);
+
+                                // Check projections for these specific players
+                                const myPlayerId = myPlayer.id || myPlayer.player_id;
+                                const theirPlayerId = theirPlayer.id || theirPlayer.player_id;
+                                const myProj = weekProjections[myPlayerId];
+                                const theirProj = weekProjections[theirPlayerId];
+                                this.debug(`  My player projection exists: ${!!myProj}`);
+                                this.debug(`  Their player projection exists: ${!!theirProj}`);
+                                if (myProj) {
+                                    const pts = myProj.pts || myProj.pts_ppr || myProj.pts_half_ppr || 'no pts field';
+                                    this.debug(`  My player pts: ${pts}`);
+                                }
+                                if (theirProj) {
+                                    const pts = theirProj.pts || theirProj.pts_ppr || theirProj.pts_half_ppr || 'no pts field';
+                                    this.debug(`  Their player pts: ${pts}`);
+                                }
+                                sampleLogged = true;
+                            }
                         }
 
+                        tradesAnalyzed++;
                         const pointDifference = totalNewPoints - totalCurrentPoints;
 
                         // Only keep beneficial trades (or slightly negative for variety)
@@ -947,8 +989,17 @@ const App = {
             // Take top 10
             const topSuggestions = allSuggestions.slice(0, 10);
 
+            this.debug(`\nAnalyzed ${tradesAnalyzed} total trades`);
             this.debug(`Found ${allSuggestions.length} possible trades`);
             this.debug(`Showing top ${topSuggestions.length} suggestions`);
+
+            // Show point range of suggestions
+            if (topSuggestions.length > 0) {
+                this.debug(`Best: +${topSuggestions[0].pointDifference.toFixed(1)} pts`);
+                if (topSuggestions.length > 1) {
+                    this.debug(`Worst shown: ${topSuggestions[topSuggestions.length - 1].pointDifference.toFixed(1)} pts`);
+                }
+            }
 
             // Display suggestions
             if (topSuggestions.length === 0) {
