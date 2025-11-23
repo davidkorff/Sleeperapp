@@ -119,7 +119,21 @@ const SleeperAPI = {
 
             const response = await fetch(url);
             if (!response.ok) throw new Error('Failed to fetch stats');
-            return await response.json();
+
+            const data = await response.json();
+
+            // Transform array of stats into object keyed by player_id (same as projections)
+            if (Array.isArray(data)) {
+                const statsObj = {};
+                data.forEach(stat => {
+                    if (stat.player_id) {
+                        statsObj[stat.player_id] = stat.stats || stat;
+                    }
+                });
+                return statsObj;
+            }
+
+            return data;
         } catch (error) {
             console.error('Error fetching player stats:', error);
             throw error;
@@ -143,7 +157,23 @@ const SleeperAPI = {
                 console.warn('Projections not available, falling back to stats');
                 return await this.getPlayerStats(season, week, seasonType);
             }
-            return await response.json();
+
+            const data = await response.json();
+
+            // Transform array of projections into object keyed by player_id
+            // API returns: [{ player_id: "123", stats: {...}, ... }, ...]
+            // We need: { "123": { stats: {...}, ... }, ... }
+            if (Array.isArray(data)) {
+                const projectionsObj = {};
+                data.forEach(projection => {
+                    if (projection.player_id) {
+                        projectionsObj[projection.player_id] = projection.stats || projection;
+                    }
+                });
+                return projectionsObj;
+            }
+
+            return data;
         } catch (error) {
             console.error('Error fetching projections:', error);
             // Fallback to stats

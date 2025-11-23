@@ -297,8 +297,14 @@ const App = {
                                 // Log sample projection format
                                 const samplePlayerId = Object.keys(data)[0];
                                 const sample = data[samplePlayerId];
-                                const sampleKeys = Object.keys(sample).join(', ');
-                                this.debug(`  Sample keys: ${sampleKeys}`);
+                                if (sample) {
+                                    const sampleKeys = Object.keys(sample).join(', ');
+                                    this.debug(`  Sample player ${samplePlayerId}: ${sampleKeys.substring(0, 80)}...`);
+
+                                    // Show actual point values if they exist
+                                    const pts = sample.pts || sample.pts_ppr || sample.pts_half_ppr || 'N/A';
+                                    this.debug(`  Sample points: ${pts}`);
+                                }
                             } else {
                                 this.debug(`⚠ Week ${week}: No projections`, 'warning');
                             }

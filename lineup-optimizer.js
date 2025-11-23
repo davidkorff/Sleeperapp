@@ -81,10 +81,27 @@ const LineupOptimizer = {
             debugFn(`  ${playersWithNonZeroPoints.length}/${players.length} players have projections`);
 
             // Show sample of player projections
-            if (playersWithNonZeroPoints.length > 0 && playersWithNonZeroPoints.length < 5) {
-                playersWithNonZeroPoints.forEach(p => {
+            if (playersWithNonZeroPoints.length > 0) {
+                const samplesToShow = Math.min(3, playersWithNonZeroPoints.length);
+                for (let i = 0; i < samplesToShow; i++) {
+                    const p = playersWithNonZeroPoints[i];
                     debugFn(`    ${p.full_name || p.first_name + ' ' + p.last_name}: ${p.projectedPoints.toFixed(2)} pts`);
-                });
+                }
+                if (playersWithNonZeroPoints.length > 3) {
+                    debugFn(`    ... and ${playersWithNonZeroPoints.length - 3} more`);
+                }
+            } else {
+                // Debug: show why players don't have projections
+                const samplePlayer = players[0];
+                if (samplePlayer) {
+                    const playerId = samplePlayer.player_id || samplePlayer.id;
+                    const hasProjection = !!playerProjections[playerId];
+                    debugFn(`    Debug: Sample player ID: ${playerId}, Has projection: ${hasProjection}`);
+                    if (hasProjection) {
+                        const proj = playerProjections[playerId];
+                        debugFn(`    Projection keys: ${Object.keys(proj).join(', ')}`);
+                    }
+                }
             }
         }
 
