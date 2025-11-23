@@ -8,8 +8,12 @@ const App = {
         user: null,
         league: null,
         roster: null,
+        allRosters: [],
+        leagueUsers: [],
+        tradingPartnerRoster: null,
         players: null,
-        projections: null,
+        projections: {}, // Store projections by week
+        currentWeek: 1,
         tradingAway: [],
         tradingFor: []
     },
@@ -49,6 +53,21 @@ const App = {
         document.getElementById('addPlayerFor').addEventListener('click', () => this.addPlayerSelect('for'));
         document.getElementById('analyzeTrade').addEventListener('click', () => this.analyzeTrade());
         document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
+    },
+
+    /**
+     * Get current NFL week based on date
+     */
+    getCurrentWeek() {
+        // NFL season 2024 started September 5, 2024
+        const seasonStart = new Date('2024-09-05');
+        const now = new Date();
+        const diffTime = now - seasonStart;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const week = Math.floor(diffDays / 7) + 1;
+
+        // Clamp between 1 and 18
+        return Math.max(1, Math.min(18, week));
     },
 
     /**
@@ -131,7 +150,6 @@ const App = {
             const leagueSelect = document.getElementById('leagueSelect');
             const selectedOption = leagueSelect.options[leagueSelect.selectedIndex];
             const leagueId = leagueSelect.value;
-            const week = parseInt(document.getElementById('week').value);
             const userId = localStorage.getItem('sleeperUserId');
 
             if (!leagueId) {
@@ -139,6 +157,15 @@ const App = {
                 this.setLoading(false);
                 return;
             }
+
+            // Get current week
+            this.state.currentWeek = this.getCurrentWeek();
+
+            // Update UI to show week range
+            document.getElementById('currentWeekDisplay').textContent = `Week ${this.state.currentWeek}`;
+            document.querySelectorAll('#weeksRange, #weeksRange2').forEach(el => {
+                el.textContent = `${this.state.currentWeek}-18`;
+            });
 
             // Get league data from the selected option
             const leagueData = JSON.parse(selectedOption.dataset.league);
@@ -148,24 +175,62 @@ const App = {
             const detailedLeague = await SleeperAPI.getLeague(leagueId);
             this.state.league = { ...leagueData, ...detailedLeague };
 
-            // Fetch user's roster with player details
-            this.state.roster = await SleeperAPI.getUserRosterWithDetails(leagueId, userId);
+            // Fetch all rosters and users
+            const [allRosters, leagueUsers, allPlayers] = await Promise.all([
+                SleeperAPI.getRosters(leagueId),
+                SleeperAPI.getLeagueUsers(leagueId),
+                SleeperAPI.getAllPlayers()
+            ]);
 
-            // Fetch all players
-            this.state.players = await SleeperAPI.getAllPlayers();
+            this.state.allRosters = allRosters;
+            this.state.leagueUsers = leagueUsers;
+            this.state.players = allPlayers;
 
-            // Fetch projections for the specified week
-            this.state.projections = await SleeperAPI.getPlayerProjections('2024', week);
+            // Find user's roster
+            const userRoster = allRosters.find(r => r.owner_id === userId);
+            if (!userRoster) throw new Error('User roster not found');
+
+            // Enrich user roster with player details
+            userRoster.playerDetails = (userRoster.players || []).map(playerId => ({
+                id: playerId,
+                ...allPlayers[playerId]
+            })).filter(p => p.id);
+
+            this.state.roster = userRoster;
+
+            // Fetch projections for all remaining weeks
+            this.state.projections = {};
+            const projectionPromises = [];
+            for (let week = this.state.currentWeek; week <= 18; week++) {
+                projectionPromises.push(
+                    SleeperAPI.getPlayerProjections('2024', week)
+                        .then(data => {
+                            this.state.projections[week] = data;
+                        })
+                        .catch(err => {
+                            console.warn(`Failed to fetch projections for week ${week}:`, err);
+                            this.state.projections[week] = {};
+                        })
+                );
+            }
+            await Promise.all(projectionPromises);
 
             // Display league info
             this.displayLeagueInfo();
 
+            // Populate trading partner dropdown
+            this.populateTradingPartners();
+
             // Show trade section
             document.getElementById('tradeSection').style.display = 'block';
 
-            // Initialize with one player select in each column
+            // Initialize with one player select for trading away
             this.addPlayerSelect('away');
-            this.addPlayerSelect('for');
+
+            // Add event listener for trading partner selection
+            document.getElementById('tradingPartnerSelect').addEventListener('change', (e) => {
+                this.onTradingPartnerSelected(e.target.value);
+            });
 
             this.setLoading(false);
         } catch (error) {
@@ -204,6 +269,76 @@ const App = {
     },
 
     /**
+     * Populate trading partners dropdown
+     */
+    populateTradingPartners() {
+        const select = document.getElementById('tradingPartnerSelect');
+        select.innerHTML = '<option value="">Select a team...</option>';
+
+        // Get all rosters except the user's
+        const tradingPartners = this.state.allRosters
+            .filter(roster => roster.owner_id !== this.state.roster.owner_id)
+            .map(roster => {
+                const user = this.state.leagueUsers.find(u => u.user_id === roster.owner_id);
+                const teamName = user?.metadata?.team_name || user?.display_name || 'Unknown Team';
+
+                return {
+                    rosterId: roster.roster_id,
+                    ownerId: roster.owner_id,
+                    teamName,
+                    roster
+                };
+            })
+            .sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+        tradingPartners.forEach(partner => {
+            const option = document.createElement('option');
+            option.value = partner.rosterId;
+            option.textContent = partner.teamName;
+            option.dataset.partner = JSON.stringify(partner);
+            select.appendChild(option);
+        });
+    },
+
+    /**
+     * Handle trading partner selection
+     */
+    onTradingPartnerSelected(rosterId) {
+        const tradingForSection = document.getElementById('tradingForSection');
+        const tradingForContainer = document.getElementById('tradingFor');
+        const partnerNameSpan = document.getElementById('partnerTeamName');
+
+        if (!rosterId) {
+            tradingForSection.style.display = 'none';
+            tradingForContainer.innerHTML = '';
+            this.state.tradingPartnerRoster = null;
+            return;
+        }
+
+        // Get selected partner
+        const select = document.getElementById('tradingPartnerSelect');
+        const selectedOption = select.options[select.selectedIndex];
+        const partner = JSON.parse(selectedOption.dataset.partner);
+
+        // Enrich partner roster with player details
+        const partnerRoster = partner.roster;
+        partnerRoster.playerDetails = (partnerRoster.players || []).map(playerId => ({
+            id: playerId,
+            ...this.state.players[playerId]
+        })).filter(p => p.id);
+
+        this.state.tradingPartnerRoster = partnerRoster;
+
+        // Update UI
+        partnerNameSpan.textContent = partner.teamName;
+        tradingForSection.style.display = 'block';
+        tradingForContainer.innerHTML = '';
+
+        // Add initial player select
+        this.addPlayerSelect('for');
+    },
+
+    /**
      * Add a player select dropdown
      */
     addPlayerSelect(type) {
@@ -217,10 +352,10 @@ const App = {
         const select = document.createElement('select');
         select.innerHTML = '<option value="">Select a player...</option>';
 
-        // For trading away, only show players on user's roster
+        // For trading away, show user's roster; for trading for, show partner's roster
         const availablePlayers = type === 'away'
             ? this.state.roster.playerDetails
-            : Object.values(this.state.players).filter(p => p.active && p.fantasy_positions);
+            : (this.state.tradingPartnerRoster?.playerDetails || []);
 
         // Sort players by position and name
         const sortedPlayers = availablePlayers.sort((a, b) => {
@@ -309,17 +444,46 @@ const App = {
                 Object.assign(rosterPositions, this.state.league.roster_positions);
             }
 
-            // Analyze the trade
-            const analysis = LineupOptimizer.analyzeTrade(
-                this.state.roster.playerDetails,
-                tradingAway,
-                tradingFor,
-                rosterPositions,
-                this.state.projections
-            );
+            // Analyze trade for all remaining weeks
+            const weeklyAnalysis = [];
+            let totalCurrentPoints = 0;
+            let totalNewPoints = 0;
+
+            for (let week = this.state.currentWeek; week <= 18; week++) {
+                const weekProjections = this.state.projections[week] || {};
+
+                const analysis = LineupOptimizer.analyzeTrade(
+                    this.state.roster.playerDetails,
+                    tradingAway,
+                    tradingFor,
+                    rosterPositions,
+                    weekProjections
+                );
+
+                weeklyAnalysis.push({
+                    week,
+                    ...analysis
+                });
+
+                totalCurrentPoints += analysis.current.totalPoints;
+                totalNewPoints += analysis.new.totalPoints;
+            }
+
+            // Create aggregate analysis
+            const aggregateAnalysis = {
+                weekly: weeklyAnalysis,
+                season: {
+                    currentPoints: totalCurrentPoints,
+                    newPoints: totalNewPoints,
+                    difference: totalNewPoints - totalCurrentPoints,
+                    percentageChange: totalCurrentPoints > 0
+                        ? ((totalNewPoints - totalCurrentPoints) / totalCurrentPoints) * 100
+                        : 0
+                }
+            };
 
             // Display results
-            this.displayResults(analysis);
+            this.displayResults(aggregateAnalysis);
 
             this.setLoading(false);
         } catch (error) {
@@ -334,22 +498,12 @@ const App = {
      */
     displayResults(analysis) {
         const resultsDiv = document.getElementById('results');
-        const currentLineupDiv = document.getElementById('currentLineup');
-        const newLineupDiv = document.getElementById('newLineup');
-        const currentPointsSpan = document.getElementById('currentPoints');
-        const newPointsSpan = document.getElementById('newPoints');
         const recommendationDiv = document.getElementById('recommendation');
 
-        // Display current lineup
-        currentLineupDiv.innerHTML = this.renderLineup(analysis.current.lineup);
-        currentPointsSpan.textContent = analysis.current.totalPoints.toFixed(2);
-
-        // Display new lineup
-        newLineupDiv.innerHTML = this.renderLineup(analysis.new.lineup);
-        newPointsSpan.textContent = analysis.new.totalPoints.toFixed(2);
+        // Get recommendation based on season difference
+        const rec = this.getSeasonRecommendation(analysis.season.difference);
 
         // Display recommendation
-        const rec = analysis.comparison.recommendation;
         recommendationDiv.className = `recommendation ${rec.type}`;
         recommendationDiv.innerHTML = `
             <div style="font-size: 1.5em; margin-bottom: 10px;">
@@ -357,12 +511,85 @@ const App = {
             </div>
             <div>${rec.message}</div>
             <div style="margin-top: 10px; font-size: 1.1em;">
-                Point Difference: ${analysis.comparison.difference > 0 ? '+' : ''}${analysis.comparison.difference.toFixed(2)}
-                (${analysis.comparison.percentageChange > 0 ? '+' : ''}${analysis.comparison.percentageChange.toFixed(1)}%)
+                Total Point Difference: ${analysis.season.difference > 0 ? '+' : ''}${analysis.season.difference.toFixed(2)}
+                (${analysis.season.percentageChange > 0 ? '+' : ''}${analysis.season.percentageChange.toFixed(1)}%)
             </div>
         `;
 
+        // Display season summary
+        document.getElementById('seasonCurrentPoints').textContent = analysis.season.currentPoints.toFixed(2);
+        document.getElementById('seasonNewPoints').textContent = analysis.season.newPoints.toFixed(2);
+        const diffElement = document.getElementById('seasonDifference');
+        diffElement.textContent = (analysis.season.difference > 0 ? '+' : '') + analysis.season.difference.toFixed(2);
+        diffElement.style.color = analysis.season.difference > 0 ? '#28a745' : analysis.season.difference < 0 ? '#dc3545' : '#999';
+
+        // Display weekly breakdown
+        const weeklyBreakdownDiv = document.getElementById('weeklyBreakdown');
+        weeklyBreakdownDiv.innerHTML = analysis.weekly.map(weekData => {
+            const diff = weekData.new.totalPoints - weekData.current.totalPoints;
+            const diffClass = diff > 0 ? 'positive' : diff < 0 ? 'negative' : '';
+
+            return `
+                <div class="week-row">
+                    <div class="week-label">Week ${weekData.week}</div>
+                    <div class="week-points">
+                        <strong>Without:</strong> ${weekData.current.totalPoints.toFixed(2)} pts
+                    </div>
+                    <div class="week-points">
+                        <strong>With:</strong> ${weekData.new.totalPoints.toFixed(2)} pts
+                    </div>
+                    <div class="week-diff ${diffClass}">
+                        ${diff > 0 ? '+' : ''}${diff.toFixed(2)} pts
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add toggle functionality
+        const toggleBtn = document.getElementById('toggleWeekly');
+        toggleBtn.onclick = () => {
+            const isHidden = weeklyBreakdownDiv.style.display === 'none';
+            weeklyBreakdownDiv.style.display = isHidden ? 'block' : 'none';
+        };
+
         resultsDiv.style.display = 'block';
+    },
+
+    /**
+     * Get recommendation based on season point difference
+     */
+    getSeasonRecommendation(difference) {
+        if (difference > 20) {
+            return {
+                type: 'positive',
+                message: `Strong Accept! This trade would increase your total points by ${difference.toFixed(2)} for the rest of the season.`
+            };
+        } else if (difference > 10) {
+            return {
+                type: 'positive',
+                message: `Accept. This trade would give you an extra ${difference.toFixed(2)} points for the rest of the season.`
+            };
+        } else if (difference > 0) {
+            return {
+                type: 'neutral',
+                message: `Slight improvement of ${difference.toFixed(2)} points for the season. Consider other factors like playoff schedule.`
+            };
+        } else if (difference > -10) {
+            return {
+                type: 'neutral',
+                message: `Slight decline of ${Math.abs(difference).toFixed(2)} points for the season. Consider other factors before declining.`
+            };
+        } else if (difference > -20) {
+            return {
+                type: 'negative',
+                message: `Decline. This trade would cost you ${Math.abs(difference).toFixed(2)} points for the rest of the season.`
+            };
+        } else {
+            return {
+                type: 'negative',
+                message: `Strong Decline! This trade would hurt your total points by ${Math.abs(difference).toFixed(2)} for the rest of the season.`
+            };
+        }
     },
 
     /**

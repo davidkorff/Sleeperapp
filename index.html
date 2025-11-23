@@ -34,9 +34,9 @@
                         <option value="">Select a league...</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="week">Week (for projections):</label>
-                    <input type="number" id="week" value="1" min="1" max="18">
+                <div class="info-message" id="weekInfo">
+                    <span class="info-icon">ℹ️</span>
+                    <span>Analyzing for <strong id="currentWeekDisplay">current week</strong> through week 18</span>
                 </div>
                 <button id="loadLeague" class="btn-primary">Load Selected League</button>
             </div>
@@ -54,6 +54,7 @@
             <div class="trade-inputs">
                 <div class="trade-column">
                     <h3>Players You're Trading Away</h3>
+                    <p class="help-text">Select players from your roster</p>
                     <div id="tradingAway"></div>
                     <button id="addPlayerAway" class="btn-secondary">+ Add Player</button>
                 </div>
@@ -62,8 +63,17 @@
 
                 <div class="trade-column">
                     <h3>Players You're Receiving</h3>
-                    <div id="tradingFor"></div>
-                    <button id="addPlayerFor" class="btn-secondary">+ Add Player</button>
+                    <div class="trade-partner-section">
+                        <label for="tradingPartnerSelect">Trading with:</label>
+                        <select id="tradingPartnerSelect" class="league-select">
+                            <option value="">Select a team...</option>
+                        </select>
+                    </div>
+                    <div id="tradingForSection" style="display: none;">
+                        <p class="help-text">Select players from <span id="partnerTeamName"></span></p>
+                        <div id="tradingFor"></div>
+                        <button id="addPlayerFor" class="btn-secondary">+ Add Player</button>
+                    </div>
                 </div>
             </div>
 
@@ -73,25 +83,34 @@
         <div id="results" class="results-section" style="display: none;">
             <h2>Trade Analysis Results</h2>
 
-            <div class="comparison">
-                <div class="scenario">
-                    <h3>Current Lineup (Without Trade)</h3>
-                    <div id="currentLineup"></div>
-                    <div class="total-points">
-                        <strong>Total Points:</strong> <span id="currentPoints">0</span>
-                    </div>
-                </div>
+            <div id="recommendation" class="recommendation"></div>
 
-                <div class="scenario">
-                    <h3>Projected Lineup (With Trade)</h3>
-                    <div id="newLineup"></div>
-                    <div class="total-points">
-                        <strong>Total Points:</strong> <span id="newPoints">0</span>
+            <div class="season-summary">
+                <h3>Rest of Season Projection</h3>
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Without Trade</div>
+                        <div class="stat-value" id="seasonCurrentPoints">0</div>
+                        <div class="stat-sub">Total Points (Weeks <span id="weeksRange">1-18</span>)</div>
+                    </div>
+                    <div class="stat-card highlight">
+                        <div class="stat-label">With Trade</div>
+                        <div class="stat-value" id="seasonNewPoints">0</div>
+                        <div class="stat-sub">Total Points (Weeks <span id="weeksRange2">1-18</span>)</div>
+                    </div>
+                    <div class="stat-card difference">
+                        <div class="stat-label">Difference</div>
+                        <div class="stat-value" id="seasonDifference">0</div>
+                        <div class="stat-sub">Points Gained/Lost</div>
                     </div>
                 </div>
             </div>
 
-            <div id="recommendation" class="recommendation"></div>
+            <div class="week-by-week">
+                <h3>Week-by-Week Breakdown</h3>
+                <button id="toggleWeekly" class="btn-secondary">Show/Hide Details</button>
+                <div id="weeklyBreakdown" style="display: none;"></div>
+            </div>
         </div>
 
         <div id="loading" class="loading" style="display: none;">
