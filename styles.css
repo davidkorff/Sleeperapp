@@ -544,6 +544,166 @@ select:focus,
     }
 }
 
+/* Trade Suggestions */
+.trade-suggestions-section {
+    background: #f8f9fa;
+    padding: 30px;
+    border-radius: 12px;
+    margin-top: 30px;
+}
+
+.trade-suggestions-section h2 {
+    color: #667eea;
+    margin-bottom: 15px;
+}
+
+#suggestionsList {
+    margin-top: 20px;
+}
+
+.suggestion-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.suggestion-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.suggestion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.suggestion-rank {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: bold;
+    padding: 8px 15px;
+    border-radius: 20px;
+    font-size: 0.9em;
+}
+
+.suggestion-impact {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: #28a745;
+}
+
+.suggestion-impact.negative {
+    color: #dc3545;
+}
+
+.suggestion-trade {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 20px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.suggestion-players {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.suggestion-players h4 {
+    font-size: 0.85em;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+}
+
+.player-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.player-item:last-child {
+    border-bottom: none;
+}
+
+.player-name {
+    font-weight: 600;
+    color: #333;
+}
+
+.player-position {
+    color: #667eea;
+    font-size: 0.85em;
+    margin-left: 5px;
+}
+
+.player-points {
+    color: #666;
+    font-size: 0.9em;
+    float: right;
+}
+
+.trade-arrow-suggestion {
+    font-size: 2em;
+    color: #667eea;
+}
+
+.suggestion-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.detail-item {
+    text-align: center;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.detail-label {
+    font-size: 0.8em;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.detail-value {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #333;
+}
+
+.suggestion-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.btn-analyze-suggestion {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.2s;
+}
+
+.btn-analyze-suggestion:hover {
+    transform: scale(1.05);
+}
+
 /* Debug Button */
 .btn-debug {
     position: fixed;

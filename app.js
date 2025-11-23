@@ -16,7 +16,8 @@ const App = {
         currentWeek: 1,
         tradingAway: [],
         tradingFor: [],
-        debugMessages: []
+        debugMessages: [],
+        tradeSuggestions: []
     },
 
     /**
@@ -119,6 +120,7 @@ const App = {
         document.getElementById('addPlayerAway').addEventListener('click', () => this.addPlayerSelect('away'));
         document.getElementById('addPlayerFor').addEventListener('click', () => this.addPlayerSelect('for'));
         document.getElementById('analyzeTrade').addEventListener('click', () => this.analyzeTrade());
+        document.getElementById('generateSuggestions').addEventListener('click', () => this.generateTradeSuggestions());
         document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
     },
 
@@ -361,6 +363,9 @@ const App = {
 
             // Show trade section
             document.getElementById('tradeSection').style.display = 'block';
+
+            // Show trade suggestions section
+            document.getElementById('tradeSuggestions').style.display = 'block';
 
             // Initialize with one player select for trading away
             this.addPlayerSelect('away');
@@ -856,6 +861,216 @@ const App = {
                 type: 'negative',
                 message: `Strong Decline! This trade would hurt your total points by ${Math.abs(difference).toFixed(2)} for the rest of the season.`
             };
+        }
+    },
+
+    /**
+     * Generate trade suggestions
+     */
+    async generateTradeSuggestions() {
+        const suggestionsLoading = document.getElementById('suggestionsLoading');
+        const suggestionsList = document.getElementById('suggestionsList');
+
+        try {
+            suggestionsLoading.style.display = 'block';
+            suggestionsList.innerHTML = '';
+
+            this.debug('\n=== GENERATING TRADE SUGGESTIONS ===');
+
+            // Get roster positions
+            const rosterPositions = {};
+            if (typeof this.state.league.roster_positions === 'object' && !Array.isArray(this.state.league.roster_positions)) {
+                Object.assign(rosterPositions, this.state.league.roster_positions);
+            }
+
+            const scoringSettings = this.state.league.scoring_settings || {};
+            const allSuggestions = [];
+
+            // For each team in the league (except ours)
+            for (const partnerRoster of this.state.allRosters) {
+                if (partnerRoster.owner_id === this.state.roster.owner_id) continue;
+
+                const partnerUser = this.state.leagueUsers.find(u => u.user_id === partnerRoster.owner_id);
+                const partnerName = partnerUser?.metadata?.team_name || partnerUser?.display_name || 'Unknown Team';
+
+                // Enrich partner roster
+                const partnerPlayers = (partnerRoster.players || []).map(playerId => ({
+                    id: playerId,
+                    player_id: playerId,
+                    ...this.state.players[playerId]
+                })).filter(p => p && p.id);
+
+                // Try 1-for-1 trades with each of their players
+                for (const theirPlayer of partnerPlayers) {
+                    for (const myPlayer of this.state.roster.playerDetails) {
+                        // Calculate impact for all weeks
+                        let totalCurrentPoints = 0;
+                        let totalNewPoints = 0;
+
+                        for (let week = this.state.currentWeek; week <= 18; week++) {
+                            const weekProjections = this.state.projections[week] || {};
+
+                            const analysis = LineupOptimizer.analyzeTrade(
+                                this.state.roster.playerDetails,
+                                [myPlayer],
+                                [theirPlayer],
+                                rosterPositions,
+                                weekProjections,
+                                scoringSettings
+                            );
+
+                            totalCurrentPoints += analysis.current.totalPoints;
+                            totalNewPoints += analysis.new.totalPoints;
+                        }
+
+                        const pointDifference = totalNewPoints - totalCurrentPoints;
+
+                        // Only keep beneficial trades (or slightly negative for variety)
+                        if (pointDifference > -5) {
+                            allSuggestions.push({
+                                partnerName,
+                                partnerRoster,
+                                tradingAway: [myPlayer],
+                                tradingFor: [theirPlayer],
+                                pointDifference,
+                                currentPoints: totalCurrentPoints,
+                                newPoints: totalNewPoints
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Sort by point difference (best first)
+            allSuggestions.sort((a, b) => b.pointDifference - a.pointDifference);
+
+            // Take top 10
+            const topSuggestions = allSuggestions.slice(0, 10);
+
+            this.debug(`Found ${allSuggestions.length} possible trades`);
+            this.debug(`Showing top ${topSuggestions.length} suggestions`);
+
+            // Display suggestions
+            if (topSuggestions.length === 0) {
+                suggestionsList.innerHTML = '<p style="text-align: center; color: #666;">No beneficial trade suggestions found. Your team is optimized!</p>';
+            } else {
+                suggestionsList.innerHTML = topSuggestions.map((suggestion, index) => {
+                    const myPlayer = suggestion.tradingAway[0];
+                    const theirPlayer = suggestion.tradingFor[0];
+
+                    return `
+                        <div class="suggestion-card">
+                            <div class="suggestion-header">
+                                <div class="suggestion-rank">#${index + 1} Best Trade</div>
+                                <div class="suggestion-impact ${suggestion.pointDifference < 0 ? 'negative' : ''}">
+                                    ${suggestion.pointDifference > 0 ? '+' : ''}${suggestion.pointDifference.toFixed(1)} pts
+                                </div>
+                            </div>
+
+                            <div class="suggestion-trade">
+                                <div class="suggestion-players">
+                                    <h4>You Trade Away</h4>
+                                    <div class="player-item">
+                                        <span class="player-name">${myPlayer.full_name || myPlayer.first_name + ' ' + myPlayer.last_name}</span>
+                                        <span class="player-position">${myPlayer.position || ''} - ${myPlayer.team || ''}</span>
+                                    </div>
+                                </div>
+
+                                <div class="trade-arrow-suggestion">⇄</div>
+
+                                <div class="suggestion-players">
+                                    <h4>You Receive</h4>
+                                    <div class="player-item">
+                                        <span class="player-name">${theirPlayer.full_name || theirPlayer.first_name + ' ' + theirPlayer.last_name}</span>
+                                        <span class="player-position">${theirPlayer.position || ''} - ${theirPlayer.team || ''}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="suggestion-details">
+                                <div class="detail-item">
+                                    <div class="detail-label">Trade With</div>
+                                    <div class="detail-value">${suggestion.partnerName}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Rest of Season Impact</div>
+                                    <div class="detail-value" style="color: ${suggestion.pointDifference > 0 ? '#28a745' : '#dc3545'}">
+                                        ${suggestion.pointDifference > 0 ? '+' : ''}${suggestion.pointDifference.toFixed(1)} pts
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="suggestion-actions">
+                                <button class="btn-analyze-suggestion" onclick="App.analyzeSuggestedTrade(${index})">
+                                    Analyze This Trade
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Store suggestions for later use
+                this.state.tradeSuggestions = topSuggestions;
+            }
+
+            suggestionsLoading.style.display = 'none';
+        } catch (error) {
+            console.error('Error generating suggestions:', error);
+            this.showError('Failed to generate trade suggestions. Please try again.');
+            suggestionsLoading.style.display = 'none';
+        }
+    },
+
+    /**
+     * Analyze a suggested trade
+     */
+    async analyzeSuggestedTrade(index) {
+        const suggestion = this.state.tradeSuggestions[index];
+        if (!suggestion) return;
+
+        // Scroll to trade section
+        document.getElementById('tradeSection').scrollIntoView({ behavior: 'smooth' });
+
+        // Wait a moment for scroll
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Clear existing selections
+        document.getElementById('tradingAway').innerHTML = '';
+        document.getElementById('tradingFor').innerHTML = '';
+
+        // Set trading partner
+        const partnerSelect = document.getElementById('tradingPartnerSelect');
+        const partnerOption = Array.from(partnerSelect.options).find(opt => {
+            const data = JSON.parse(opt.dataset.partner || '{}');
+            return data.ownerId === suggestion.partnerRoster.owner_id;
+        });
+
+        if (partnerOption) {
+            partnerSelect.value = partnerOption.value;
+            this.onTradingPartnerSelected(partnerOption.value);
+
+            // Wait for partner selection to update UI
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Add players
+            this.addPlayerSelect('away');
+            this.addPlayerSelect('for');
+
+            // Set the selected players
+            const awaySelect = document.querySelector('#tradingAway select');
+            const forSelect = document.querySelector('#tradingFor select');
+
+            if (awaySelect) {
+                awaySelect.value = suggestion.tradingAway[0].id || suggestion.tradingAway[0].player_id;
+            }
+
+            if (forSelect) {
+                forSelect.value = suggestion.tradingFor[0].id || suggestion.tradingFor[0].player_id;
+            }
+
+            // Auto-analyze
+            await new Promise(resolve => setTimeout(resolve, 300));
+            this.analyzeTrade();
         }
     },
 
