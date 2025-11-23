@@ -1,0 +1,221 @@
+/**
+ * Lineup Optimizer Module
+ * Optimizes fantasy football lineups to maximize points based on roster positions
+ */
+
+const LineupOptimizer = {
+    /**
+     * Position eligibility mapping
+     */
+    positionEligibility: {
+        'QB': ['QB'],
+        'RB': ['RB'],
+        'WR': ['WR'],
+        'TE': ['TE'],
+        'FLEX': ['RB', 'WR', 'TE'],
+        'SUPER_FLEX': ['QB', 'RB', 'WR', 'TE'],
+        'REC_FLEX': ['WR', 'TE'],
+        'K': ['K'],
+        'DEF': ['DEF']
+    },
+
+    /**
+     * Parse roster positions from league settings
+     */
+    parseRosterPositions(rosterPositions) {
+        const positions = [];
+
+        for (const [position, count] of Object.entries(rosterPositions)) {
+            // Skip bench and injured reserve
+            if (position === 'BN' || position === 'IR') continue;
+
+            for (let i = 0; i < count; i++) {
+                positions.push(position);
+            }
+        }
+
+        return positions;
+    },
+
+    /**
+     * Check if a player is eligible for a position
+     */
+    isEligible(playerPosition, slotPosition) {
+        const eligiblePositions = this.positionEligibility[slotPosition] || [slotPosition];
+        return eligiblePositions.includes(playerPosition);
+    },
+
+    /**
+     * Optimize lineup to maximize points
+     * Uses a greedy algorithm with backtracking for FLEX positions
+     */
+    optimizeLineup(players, rosterPositions, playerProjections) {
+        const positions = this.parseRosterPositions(rosterPositions);
+
+        // Add projections to players
+        const playersWithPoints = players.map(player => {
+            const projection = playerProjections[player.player_id] || playerProjections[player.id];
+            const points = projection ? projection.pts || projection.pts_half_ppr || projection.pts_ppr || 0 : 0;
+
+            return {
+                ...player,
+                projectedPoints: points,
+                position: player.position || player.fantasy_positions?.[0] || 'UNKNOWN'
+            };
+        });
+
+        // Sort players by projected points (descending)
+        playersWithPoints.sort((a, b) => b.projectedPoints - a.projectedPoints);
+
+        const lineup = [];
+        const usedPlayers = new Set();
+
+        // Separate positions into dedicated and flex
+        const dedicatedPositions = positions.filter(pos =>
+            !pos.includes('FLEX') && pos !== 'BN' && pos !== 'IR'
+        );
+        const flexPositions = positions.filter(pos => pos.includes('FLEX'));
+
+        // First pass: Fill dedicated positions (QB, RB, WR, TE, K, DEF)
+        const positionGroups = {};
+        dedicatedPositions.forEach(pos => {
+            if (!positionGroups[pos]) positionGroups[pos] = [];
+            positionGroups[pos].push(pos);
+        });
+
+        for (const [position, slots] of Object.entries(positionGroups)) {
+            const eligiblePlayers = playersWithPoints.filter(p =>
+                this.isEligible(p.position, position) && !usedPlayers.has(p.id || p.player_id)
+            );
+
+            for (let i = 0; i < slots.length; i++) {
+                if (eligiblePlayers[i]) {
+                    lineup.push({
+                        slot: position,
+                        player: eligiblePlayers[i],
+                        points: eligiblePlayers[i].projectedPoints
+                    });
+                    usedPlayers.add(eligiblePlayers[i].id || eligiblePlayers[i].player_id);
+                } else {
+                    // No player available for this position
+                    lineup.push({
+                        slot: position,
+                        player: null,
+                        points: 0
+                    });
+                }
+            }
+        }
+
+        // Second pass: Fill FLEX positions with remaining best players
+        for (const flexPosition of flexPositions) {
+            const eligiblePlayers = playersWithPoints.filter(p =>
+                this.isEligible(p.position, flexPosition) && !usedPlayers.has(p.id || p.player_id)
+            );
+
+            if (eligiblePlayers.length > 0) {
+                const bestPlayer = eligiblePlayers[0];
+                lineup.push({
+                    slot: flexPosition,
+                    player: bestPlayer,
+                    points: bestPlayer.projectedPoints
+                });
+                usedPlayers.add(bestPlayer.id || bestPlayer.player_id);
+            } else {
+                lineup.push({
+                    slot: flexPosition,
+                    player: null,
+                    points: 0
+                });
+            }
+        }
+
+        // Calculate total points
+        const totalPoints = lineup.reduce((sum, slot) => sum + slot.points, 0);
+
+        return {
+            lineup,
+            totalPoints: Math.round(totalPoints * 100) / 100,
+            benchPlayers: playersWithPoints.filter(p => !usedPlayers.has(p.id || p.player_id))
+        };
+    },
+
+    /**
+     * Compare two lineups and determine which is better
+     */
+    compareLineups(currentLineup, newLineup) {
+        const difference = newLineup.totalPoints - currentLineup.totalPoints;
+
+        return {
+            currentPoints: currentLineup.totalPoints,
+            newPoints: newLineup.totalPoints,
+            difference: Math.round(difference * 100) / 100,
+            percentageChange: currentLineup.totalPoints > 0
+                ? Math.round((difference / currentLineup.totalPoints) * 10000) / 100
+                : 0,
+            recommendation: this.getRecommendation(difference)
+        };
+    },
+
+    /**
+     * Get trade recommendation based on point difference
+     */
+    getRecommendation(difference) {
+        if (difference > 5) {
+            return {
+                type: 'positive',
+                message: `Strong Accept! This trade would increase your lineup by ${Math.round(difference * 100) / 100} points per week.`
+            };
+        } else if (difference > 2) {
+            return {
+                type: 'positive',
+                message: `Accept. This trade would give you an extra ${Math.round(difference * 100) / 100} points per week.`
+            };
+        } else if (difference > 0) {
+            return {
+                type: 'neutral',
+                message: `Slight improvement of ${Math.round(difference * 100) / 100} points. Consider other factors like playoff schedule and bye weeks.`
+            };
+        } else if (difference > -2) {
+            return {
+                type: 'neutral',
+                message: `Slight decline of ${Math.round(Math.abs(difference) * 100) / 100} points. Consider other factors before declining.`
+            };
+        } else if (difference > -5) {
+            return {
+                type: 'negative',
+                message: `Decline. This trade would cost you ${Math.round(Math.abs(difference) * 100) / 100} points per week.`
+            };
+        } else {
+            return {
+                type: 'negative',
+                message: `Strong Decline! This trade would hurt your lineup by ${Math.round(Math.abs(difference) * 100) / 100} points per week.`
+            };
+        }
+    },
+
+    /**
+     * Simulate trade and compare lineups
+     */
+    analyzeTrade(currentRoster, tradingAway, tradingFor, rosterPositions, playerProjections) {
+        // Create new roster after trade
+        const newRoster = currentRoster.filter(player => {
+            const playerId = player.id || player.player_id;
+            return !tradingAway.some(p => (p.id || p.player_id) === playerId);
+        });
+
+        // Add incoming players
+        newRoster.push(...tradingFor);
+
+        // Optimize both lineups
+        const currentLineup = this.optimizeLineup(currentRoster, rosterPositions, playerProjections);
+        const newLineup = this.optimizeLineup(newRoster, rosterPositions, playerProjections);
+
+        // Compare lineups
+        return {
+            current: currentLineup,
+            new: newLineup,
+            comparison: this.compareLineups(currentLineup, newLineup)
+        };
+    }
+};

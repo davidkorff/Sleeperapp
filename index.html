@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sleeper Trade Analyzer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sleeper Fantasy Trade Analyzer</h1>
+            <p class="subtitle">Analyze trades based on actual playable scenarios</p>
+        </header>
+
+        <div class="setup-section">
+            <h2>League Setup</h2>
+            <div class="form-group">
+                <label for="username">Your Sleeper Username:</label>
+                <input type="text" id="username" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label for="leagueId">League ID:</label>
+                <input type="text" id="leagueId" placeholder="Enter league ID">
+            </div>
+            <div class="form-group">
+                <label for="week">Week (for projections):</label>
+                <input type="number" id="week" value="1" min="1" max="18">
+            </div>
+            <button id="loadLeague" class="btn-primary">Load League</button>
+        </div>
+
+        <div id="leagueInfo" class="info-section" style="display: none;">
+            <h3>League Information</h3>
+            <div id="leagueDetails"></div>
+            <div id="rosterInfo"></div>
+        </div>
+
+        <div id="tradeSection" class="trade-section" style="display: none;">
+            <h2>Trade Analysis</h2>
+
+            <div class="trade-inputs">
+                <div class="trade-column">
+                    <h3>Players You're Trading Away</h3>
+                    <div id="tradingAway"></div>
+                    <button id="addPlayerAway" class="btn-secondary">+ Add Player</button>
+                </div>
+
+                <div class="trade-arrow">⇄</div>
+
+                <div class="trade-column">
+                    <h3>Players You're Receiving</h3>
+                    <div id="tradingFor"></div>
+                    <button id="addPlayerFor" class="btn-secondary">+ Add Player</button>
+                </div>
+            </div>
+
+            <button id="analyzeTrade" class="btn-primary">Analyze Trade</button>
+        </div>
+
+        <div id="results" class="results-section" style="display: none;">
+            <h2>Trade Analysis Results</h2>
+
+            <div class="comparison">
+                <div class="scenario">
+                    <h3>Current Lineup (Without Trade)</h3>
+                    <div id="currentLineup"></div>
+                    <div class="total-points">
+                        <strong>Total Points:</strong> <span id="currentPoints">0</span>
+                    </div>
+                </div>
+
+                <div class="scenario">
+                    <h3>Projected Lineup (With Trade)</h3>
+                    <div id="newLineup"></div>
+                    <div class="total-points">
+                        <strong>Total Points:</strong> <span id="newPoints">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="recommendation" class="recommendation"></div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script src="sleeper-api.js"></script>
+    <script src="lineup-optimizer.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
