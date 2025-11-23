@@ -309,26 +309,20 @@ const App = {
             const projectionPromises = [];
 
             this.clearDebug();
+            this.debug(`Fetching ${leagueSeason} stats for weeks ${this.state.currentWeek}-18...`);
 
-            // For 2025, use 2024 week-by-week projections since 2025 weekly data doesn't exist yet
-            const projectionSeason = leagueSeason === '2025' ? '2024' : leagueSeason;
-            if (leagueSeason === '2025') {
-                this.debug(`Using 2024 weekly projections for 2025 analysis (weeks ${this.state.currentWeek}-18)...`);
-            } else {
-                this.debug(`Fetching ${projectionSeason} projections weeks ${this.state.currentWeek}-18...`);
-            }
-
+            // Use stats instead of projections - stats have actual values
             for (let week = this.state.currentWeek; week <= 18; week++) {
                 projectionPromises.push(
-                    SleeperAPI.getPlayerProjections(projectionSeason, week)
+                    SleeperAPI.getPlayerStats(leagueSeason, week)
                         .then(data => {
                             this.state.projections[week] = data;
                             const projectionCount = Object.keys(data).length;
 
                             if (projectionCount > 0) {
-                                this.debug(`✓ Week ${week}: ${projectionCount} projections`);
+                                this.debug(`✓ Week ${week}: ${projectionCount} stats`);
 
-                                // Log sample projection format for first week only
+                                // Log sample stats format for first week only
                                 if (week === this.state.currentWeek) {
                                     const samplePlayerId = Object.keys(data)[0];
                                     const sample = data[samplePlayerId];
@@ -336,17 +330,14 @@ const App = {
                                         const sampleKeys = Object.keys(sample);
                                         this.debug(`  Sample player ${samplePlayerId}: ${sampleKeys.join(', ').substring(0, 150)}`);
 
-                                        const pts = sample.pts || sample.pts_ppr || sample.pts_half_ppr || 'N/A';
-                                        this.debug(`  Sample points: ${pts}`);
-
-                                        this.debug(`  Full sample for debugging:`);
+                                        this.debug(`  Sample stats (first 10 fields):`);
                                         sampleKeys.slice(0, 10).forEach(key => {
                                             this.debug(`    ${key}: ${sample[key]}`);
                                         });
                                     }
                                 }
                             } else {
-                                this.debug(`⚠ Week ${week}: No projections`, 'warning');
+                                this.debug(`⚠ Week ${week}: No stats available yet`, 'warning');
                             }
                         })
                         .catch(err => {
