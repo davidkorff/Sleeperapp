@@ -38,8 +38,8 @@ const App = {
         // Attach event listeners
         this.attachEventListeners();
 
-        // Auto-load 2024 leagues
-        await this.loadUserLeagues(userId, '2024');
+        // Auto-load 2025 leagues
+        await this.loadUserLeagues(userId, '2025');
 
         console.log('Trade Analyzer initialized');
     },
@@ -64,9 +64,19 @@ const App = {
      * Get current NFL week based on date
      */
     getCurrentWeek() {
+        // NFL season 2025 starts September 4, 2025
         // NFL season 2024 started September 5, 2024
-        const seasonStart = new Date('2024-09-05');
         const now = new Date();
+        const currentYear = now.getFullYear();
+
+        // Determine which season we're in
+        let seasonStart;
+        if (currentYear >= 2025 && now >= new Date('2025-09-04')) {
+            seasonStart = new Date('2025-09-04');
+        } else {
+            seasonStart = new Date('2024-09-05');
+        }
+
         const diffTime = now - seasonStart;
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
         const week = Math.floor(diffDays / 7) + 1;
@@ -88,7 +98,7 @@ const App = {
     /**
      * Load user's leagues
      */
-    async loadUserLeagues(userId, season = '2024') {
+    async loadUserLeagues(userId, season = '2025') {
         try {
             const loadingDiv = document.getElementById('leaguesLoading');
             const leaguesListDiv = document.getElementById('leaguesList');
@@ -112,7 +122,7 @@ const App = {
             leagues.forEach(league => {
                 const option = document.createElement('option');
                 option.value = league.league_id;
-                const season = league.season || '2024';
+                const season = league.season || '2025';
                 option.textContent = `${league.name} - ${season} (${league.total_rosters} teams)`;
                 option.dataset.league = JSON.stringify(league);
                 leagueSelect.appendChild(option);
@@ -229,7 +239,7 @@ const App = {
             this.state.roster = userRoster;
 
             // Fetch projections for all remaining weeks
-            const leagueSeason = this.state.league.season || '2024';
+            const leagueSeason = this.state.league.season || '2025';
             this.state.projections = {};
             const projectionPromises = [];
             for (let week = this.state.currentWeek; week <= 18; week++) {
