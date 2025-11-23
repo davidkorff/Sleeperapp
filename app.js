@@ -917,6 +917,9 @@ const App = {
         for (let week = this.state.currentWeek; week <= 18; week++) {
             const weekProjections = this.state.projections[week] || {};
 
+            // Create debug function only for first sample trade
+            const debugFn = (!firstWeekLogged && week === this.state.currentWeek) ? this.debug.bind(this) : null;
+
             // Analyze from my perspective
             const myAnalysis = LineupOptimizer.analyzeTrade(
                 this.state.roster.playerDetails,
@@ -924,7 +927,8 @@ const App = {
                 theirPlayers,
                 rosterPositions,
                 weekProjections,
-                scoringSettings
+                scoringSettings,
+                debugFn
             );
 
             myTotalCurrentPoints += myAnalysis.current.totalPoints;
@@ -937,7 +941,8 @@ const App = {
                 myPlayers,
                 rosterPositions,
                 weekProjections,
-                scoringSettings
+                scoringSettings,
+                debugFn
             );
 
             theirTotalCurrentPoints += theirAnalysis.current.totalPoints;
