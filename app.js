@@ -309,35 +309,50 @@ const App = {
             const projectionPromises = [];
 
             this.clearDebug();
-            this.debug(`Fetching ${leagueSeason} stats for weeks ${this.state.currentWeek}-18...`);
+            this.debug(`Fetching ${leagueSeason} projections for weeks ${this.state.currentWeek}-18...`);
 
-            // Use stats instead of projections - stats have actual values
             for (let week = this.state.currentWeek; week <= 18; week++) {
                 projectionPromises.push(
-                    SleeperAPI.getPlayerStats(leagueSeason, week)
+                    SleeperAPI.getPlayerProjections(leagueSeason, week)
                         .then(data => {
                             this.state.projections[week] = data;
                             const projectionCount = Object.keys(data).length;
 
                             if (projectionCount > 0) {
-                                this.debug(`✓ Week ${week}: ${projectionCount} stats`);
+                                this.debug(`✓ Week ${week}: ${projectionCount} projections`);
 
-                                // Log sample stats format for first week only
+                                // Log sample projection format for first week only
                                 if (week === this.state.currentWeek) {
-                                    const samplePlayerId = Object.keys(data)[0];
-                                    const sample = data[samplePlayerId];
+                                    // Find a player with actual stats (not just ADP)
+                                    let samplePlayerId = null;
+                                    let sample = null;
+
+                                    for (const [playerId, proj] of Object.entries(data)) {
+                                        const keys = Object.keys(proj);
+                                        // Look for projections with more than just adp_dd_ppr
+                                        if (keys.length > 1 || (keys.length === 1 && keys[0] !== 'adp_dd_ppr')) {
+                                            samplePlayerId = playerId;
+                                            sample = proj;
+                                            break;
+                                        }
+                                    }
+
                                     if (sample) {
                                         const sampleKeys = Object.keys(sample);
-                                        this.debug(`  Sample player ${samplePlayerId}: ${sampleKeys.join(', ').substring(0, 150)}`);
+                                        this.debug(`  Sample player ${samplePlayerId} (${sampleKeys.length} fields)`);
+                                        this.debug(`  Fields: ${sampleKeys.join(', ').substring(0, 150)}`);
 
-                                        this.debug(`  Sample stats (first 10 fields):`);
-                                        sampleKeys.slice(0, 10).forEach(key => {
+                                        // Show actual stat values
+                                        this.debug(`  Sample values:`);
+                                        sampleKeys.slice(0, 15).forEach(key => {
                                             this.debug(`    ${key}: ${sample[key]}`);
                                         });
+                                    } else {
+                                        this.debug(`  No players with stat projections found (only ADP data)`);
                                     }
                                 }
                             } else {
-                                this.debug(`⚠ Week ${week}: No stats available yet`, 'warning');
+                                this.debug(`⚠ Week ${week}: No projections`, 'warning');
                             }
                         })
                         .catch(err => {
