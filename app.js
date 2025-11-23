@@ -306,67 +306,56 @@ const App = {
             // Fetch projections for all remaining weeks
             const leagueSeason = this.state.league.season || '2025';
             this.state.projections = {};
+            const projectionPromises = [];
 
             this.clearDebug();
-            this.debug(`Fetching ${leagueSeason} season projections...`);
 
-            // For 2025, fetch season-long projections and average across remaining weeks
-            // Week-by-week projections don't exist yet for future seasons
-            try {
-                const seasonProjections = await SleeperAPI.getPlayerProjections(leagueSeason, null);
-                const projectionCount = Object.keys(seasonProjections).length;
-
-                this.debug(`✓ Fetched ${projectionCount} season-long projections`);
-
-                // Log sample to verify structure
-                const samplePlayerId = Object.keys(seasonProjections)[0];
-                const sample = seasonProjections[samplePlayerId];
-                if (sample) {
-                    const sampleKeys = Object.keys(sample);
-                    this.debug(`  Sample player ${samplePlayerId}: ${sampleKeys.join(', ').substring(0, 150)}`);
-
-                    const pts = sample.pts || sample.pts_ppr || sample.pts_half_ppr || 'N/A';
-                    this.debug(`  Sample season total: ${pts}`);
-
-                    this.debug(`  Full sample for debugging:`);
-                    sampleKeys.slice(0, 10).forEach(key => {
-                        this.debug(`    ${key}: ${sample[key]}`);
-                    });
-                }
-
-                // Calculate weeks remaining (total season is 18 weeks)
-                const weeksRemaining = 18 - this.state.currentWeek + 1;
-                this.debug(`  Dividing season totals by ${weeksRemaining} remaining weeks...`);
-
-                // Convert season totals to per-week averages and use for each week
-                for (let week = this.state.currentWeek; week <= 18; week++) {
-                    this.state.projections[week] = {};
-
-                    // For each player, divide season stats by remaining weeks
-                    for (const [playerId, stats] of Object.entries(seasonProjections)) {
-                        if (!stats || typeof stats !== 'object') continue;
-
-                        const weeklyStats = {};
-                        for (const [statKey, statValue] of Object.entries(stats)) {
-                            if (typeof statValue === 'number' && statKey !== 'adp_dd_ppr') {
-                                weeklyStats[statKey] = statValue / weeksRemaining;
-                            } else {
-                                weeklyStats[statKey] = statValue;
-                            }
-                        }
-
-                        this.state.projections[week][playerId] = weeklyStats;
-                    }
-                }
-
-                this.debug(`✓ Created per-week projections for weeks ${this.state.currentWeek}-18`);
-            } catch (err) {
-                this.debug(`✗ Failed to fetch projections: ${err.message}`, 'error');
-                // Initialize empty projections for all weeks
-                for (let week = this.state.currentWeek; week <= 18; week++) {
-                    this.state.projections[week] = {};
-                }
+            // For 2025, use 2024 week-by-week projections since 2025 weekly data doesn't exist yet
+            const projectionSeason = leagueSeason === '2025' ? '2024' : leagueSeason;
+            if (leagueSeason === '2025') {
+                this.debug(`Using 2024 weekly projections for 2025 analysis (weeks ${this.state.currentWeek}-18)...`);
+            } else {
+                this.debug(`Fetching ${projectionSeason} projections weeks ${this.state.currentWeek}-18...`);
             }
+
+            for (let week = this.state.currentWeek; week <= 18; week++) {
+                projectionPromises.push(
+                    SleeperAPI.getPlayerProjections(projectionSeason, week)
+                        .then(data => {
+                            this.state.projections[week] = data;
+                            const projectionCount = Object.keys(data).length;
+
+                            if (projectionCount > 0) {
+                                this.debug(`✓ Week ${week}: ${projectionCount} projections`);
+
+                                // Log sample projection format for first week only
+                                if (week === this.state.currentWeek) {
+                                    const samplePlayerId = Object.keys(data)[0];
+                                    const sample = data[samplePlayerId];
+                                    if (sample) {
+                                        const sampleKeys = Object.keys(sample);
+                                        this.debug(`  Sample player ${samplePlayerId}: ${sampleKeys.join(', ').substring(0, 150)}`);
+
+                                        const pts = sample.pts || sample.pts_ppr || sample.pts_half_ppr || 'N/A';
+                                        this.debug(`  Sample points: ${pts}`);
+
+                                        this.debug(`  Full sample for debugging:`);
+                                        sampleKeys.slice(0, 10).forEach(key => {
+                                            this.debug(`    ${key}: ${sample[key]}`);
+                                        });
+                                    }
+                                }
+                            } else {
+                                this.debug(`⚠ Week ${week}: No projections`, 'warning');
+                            }
+                        })
+                        .catch(err => {
+                            this.debug(`✗ Week ${week}: ${err.message}`, 'error');
+                            this.state.projections[week] = {};
+                        })
+                );
+            }
+            await Promise.all(projectionPromises);
 
             // Check if we got any projections at all
             const totalProjections = Object.values(this.state.projections).reduce((sum, week) => sum + Object.keys(week).length, 0);
