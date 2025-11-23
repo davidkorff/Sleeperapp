@@ -883,17 +883,20 @@ const App = {
     },
 
     /**
-     * Analyze a single trade scenario
+     * Analyze a single trade scenario from both perspectives
      */
-    analyzeTradeScenario(myPlayers, theirPlayers, rosterPositions, scoringSettings, sampleLogged) {
-        let totalCurrentPoints = 0;
-        let totalNewPoints = 0;
+    analyzeTradeScenario(myPlayers, theirPlayers, partnerRoster, rosterPositions, scoringSettings, sampleLogged) {
+        let myTotalCurrentPoints = 0;
+        let myTotalNewPoints = 0;
+        let theirTotalCurrentPoints = 0;
+        let theirTotalNewPoints = 0;
         let firstWeekLogged = sampleLogged;
 
         for (let week = this.state.currentWeek; week <= 18; week++) {
             const weekProjections = this.state.projections[week] || {};
 
-            const analysis = LineupOptimizer.analyzeTrade(
+            // Analyze from my perspective
+            const myAnalysis = LineupOptimizer.analyzeTrade(
                 this.state.roster.playerDetails,
                 myPlayers,
                 theirPlayers,
@@ -902,23 +905,40 @@ const App = {
                 scoringSettings
             );
 
-            totalCurrentPoints += analysis.current.totalPoints;
-            totalNewPoints += analysis.new.totalPoints;
+            myTotalCurrentPoints += myAnalysis.current.totalPoints;
+            myTotalNewPoints += myAnalysis.new.totalPoints;
+
+            // Analyze from their perspective (reverse the trade)
+            const theirAnalysis = LineupOptimizer.analyzeTrade(
+                partnerRoster,
+                theirPlayers,
+                myPlayers,
+                rosterPositions,
+                weekProjections,
+                scoringSettings
+            );
+
+            theirTotalCurrentPoints += theirAnalysis.current.totalPoints;
+            theirTotalNewPoints += theirAnalysis.new.totalPoints;
 
             // Log first trade calculation details
             if (!firstWeekLogged && week === this.state.currentWeek) {
                 const myPlayerNames = myPlayers.map(p => p.full_name || p.first_name + ' ' + p.last_name).join(', ');
                 const theirPlayerNames = theirPlayers.map(p => p.full_name || p.first_name + ' ' + p.last_name).join(', ');
                 this.debug(`\nSample trade: ${myPlayerNames} for ${theirPlayerNames}`);
-                this.debug(`  Week ${week}: Current ${analysis.current.totalPoints.toFixed(2)}, New ${analysis.new.totalPoints.toFixed(2)}`);
+                this.debug(`  Week ${week}: My Current ${myAnalysis.current.totalPoints.toFixed(2)}, My New ${myAnalysis.new.totalPoints.toFixed(2)}`);
+                this.debug(`  Week ${week}: Their Current ${theirAnalysis.current.totalPoints.toFixed(2)}, Their New ${theirAnalysis.new.totalPoints.toFixed(2)}`);
                 firstWeekLogged = true;
             }
         }
 
+        const myPointDifference = myTotalNewPoints - myTotalCurrentPoints;
+        const theirPointDifference = theirTotalNewPoints - theirTotalCurrentPoints;
+
         return {
-            totalCurrentPoints,
-            totalNewPoints,
-            pointDifference: totalNewPoints - totalCurrentPoints,
+            myPointDifference,
+            theirPointDifference,
+            isWinWin: myPointDifference > 0 && theirPointDifference > 0,
             sampleLogged: firstWeekLogged
         };
     },
@@ -1005,6 +1025,7 @@ const App = {
                             const result = this.analyzeTradeScenario(
                                 myPlayers,
                                 theirPlayers,
+                                partnerPlayers,  // Pass their full roster for opponent analysis
                                 rosterPositions,
                                 scoringSettings,
                                 sampleLogged
@@ -1013,16 +1034,16 @@ const App = {
                             sampleLogged = result.sampleLogged;
                             tradesAnalyzed++;
 
-                            // Only keep beneficial trades (or slightly negative for variety)
-                            if (result.pointDifference > -10) {
+                            // Only keep trades where YOU come out ahead
+                            if (result.myPointDifference > 0) {
                                 allSuggestions.push({
                                     partnerName,
                                     partnerRoster,
                                     tradingAway: myPlayers,
                                     tradingFor: theirPlayers,
-                                    pointDifference: result.pointDifference,
-                                    currentPoints: result.totalCurrentPoints,
-                                    newPoints: result.totalNewPoints,
+                                    myPointDifference: result.myPointDifference,
+                                    theirPointDifference: result.theirPointDifference,
+                                    isWinWin: result.isWinWin,
                                     tradeType: tradeType.name
                                 });
                             }
@@ -1031,21 +1052,31 @@ const App = {
                 }
             }
 
-            // Sort by point difference (best first)
-            allSuggestions.sort((a, b) => b.pointDifference - a.pointDifference);
+            // Sort by YOUR point gain (best first), then prioritize win-win trades
+            allSuggestions.sort((a, b) => {
+                const pointDiff = b.myPointDifference - a.myPointDifference;
+                if (Math.abs(pointDiff) < 0.1) {
+                    // If point gains are similar, prioritize win-win trades
+                    if (a.isWinWin && !b.isWinWin) return -1;
+                    if (!a.isWinWin && b.isWinWin) return 1;
+                }
+                return pointDiff;
+            });
 
             // Take top 10
             const topSuggestions = allSuggestions.slice(0, 10);
 
             this.debug(`\nAnalyzed ${tradesAnalyzed} total trades`);
-            this.debug(`Found ${allSuggestions.length} possible trades`);
+            this.debug(`Found ${allSuggestions.length} beneficial trades (where you gain points)`);
+            const winWinCount = allSuggestions.filter(s => s.isWinWin).length;
+            this.debug(`Win-Win trades: ${winWinCount}`);
             this.debug(`Showing top ${topSuggestions.length} suggestions`);
 
             // Show point range of suggestions
             if (topSuggestions.length > 0) {
-                this.debug(`Best: +${topSuggestions[0].pointDifference.toFixed(1)} pts`);
+                this.debug(`Best: +${topSuggestions[0].myPointDifference.toFixed(1)} pts for you`);
                 if (topSuggestions.length > 1) {
-                    this.debug(`Worst shown: ${topSuggestions[topSuggestions.length - 1].pointDifference.toFixed(1)} pts`);
+                    this.debug(`10th best: +${topSuggestions[topSuggestions.length - 1].myPointDifference.toFixed(1)} pts for you`);
                 }
             }
 
@@ -1068,12 +1099,19 @@ const App = {
                         </div>
                     `).join('');
 
+                    const winWinBadge = suggestion.isWinWin
+                        ? '<span style="background: #28a745; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; margin-left: 8px;">🤝 Win-Win</span>'
+                        : '';
+
                     return `
                         <div class="suggestion-card">
                             <div class="suggestion-header">
-                                <div class="suggestion-rank">#${index + 1} Best Trade (${suggestion.tradeType})</div>
-                                <div class="suggestion-impact ${suggestion.pointDifference < 0 ? 'negative' : ''}">
-                                    ${suggestion.pointDifference > 0 ? '+' : ''}${suggestion.pointDifference.toFixed(1)} pts
+                                <div class="suggestion-rank">
+                                    #${index + 1} Best Trade (${suggestion.tradeType})
+                                    ${winWinBadge}
+                                </div>
+                                <div class="suggestion-impact">
+                                    You: +${suggestion.myPointDifference.toFixed(1)} pts
                                 </div>
                             </div>
 
@@ -1097,9 +1135,15 @@ const App = {
                                     <div class="detail-value">${suggestion.partnerName}</div>
                                 </div>
                                 <div class="detail-item">
-                                    <div class="detail-label">Rest of Season Impact</div>
-                                    <div class="detail-value" style="color: ${suggestion.pointDifference > 0 ? '#28a745' : '#dc3545'}">
-                                        ${suggestion.pointDifference > 0 ? '+' : ''}${suggestion.pointDifference.toFixed(1)} pts
+                                    <div class="detail-label">Your Gain</div>
+                                    <div class="detail-value" style="color: #28a745;">
+                                        +${suggestion.myPointDifference.toFixed(1)} pts
+                                    </div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Their Impact</div>
+                                    <div class="detail-value" style="color: ${suggestion.theirPointDifference > 0 ? '#28a745' : suggestion.theirPointDifference > -2 ? '#ffc107' : '#dc3545'}">
+                                        ${suggestion.theirPointDifference > 0 ? '+' : ''}${suggestion.theirPointDifference.toFixed(1)} pts
                                     </div>
                                 </div>
                             </div>
