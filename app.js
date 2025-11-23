@@ -293,8 +293,9 @@ const App = {
                     return null;
                 }
                 return {
+                    ...playerData,
                     id: playerId,
-                    ...playerData
+                    player_id: playerId  // Ensure both id and player_id are set correctly
                 };
             }).filter(p => p && p.id);
 
@@ -507,8 +508,9 @@ const App = {
                 return null;
             }
             return {
+                ...playerData,
                 id: playerId,
-                ...playerData
+                player_id: playerId
             };
         }).filter(p => p && p.id);
 
@@ -582,8 +584,9 @@ const App = {
         // Enrich partner roster with player details
         const partnerRoster = partner.roster;
         partnerRoster.playerDetails = (partnerRoster.players || []).map(playerId => ({
+            ...this.state.players[playerId],
             id: playerId,
-            ...this.state.players[playerId]
+            player_id: playerId
         })).filter(p => p.id);
 
         this.state.tradingPartnerRoster = partnerRoster;
@@ -998,9 +1001,9 @@ const App = {
 
                 // Enrich partner roster
                 const partnerPlayers = (partnerRoster.players || []).map(playerId => ({
+                    ...this.state.players[playerId],
                     id: playerId,
-                    player_id: playerId,
-                    ...this.state.players[playerId]
+                    player_id: playerId
                 })).filter(p => p && p.id);
 
                 this.debug(`\nAnalyzing trades with ${partnerName}...`);
