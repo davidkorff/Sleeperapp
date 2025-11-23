@@ -372,6 +372,41 @@ const App = {
                 this.showError(`⚠️ No projections available for ${leagueSeason} season. Try using ${parseInt(leagueSeason) - 1} instead.`);
             }
 
+            // Fetch recent stats to identify players who are actually playing
+            this.debug(`\nChecking recent playing time...`);
+            this.state.recentlyActivePlayers = new Set();
+
+            // Check last 3 weeks of stats (or fewer if early in season)
+            const weeksToCheck = Math.min(3, Math.max(1, this.state.currentWeek - 1));
+            const recentStatsPromises = [];
+
+            for (let i = 0; i < weeksToCheck; i++) {
+                const checkWeek = this.state.currentWeek - 1 - i;
+                if (checkWeek > 0) {
+                    recentStatsPromises.push(
+                        SleeperAPI.getPlayerStats(leagueSeason, checkWeek)
+                            .then(stats => {
+                                // Mark any player with stats as recently active
+                                Object.entries(stats).forEach(([playerId, playerStats]) => {
+                                    // Check if they have any meaningful stats (not just zeros)
+                                    const hasStats = Object.values(playerStats).some(val =>
+                                        typeof val === 'number' && val > 0
+                                    );
+                                    if (hasStats) {
+                                        this.state.recentlyActivePlayers.add(playerId);
+                                    }
+                                });
+                            })
+                            .catch(err => {
+                                console.warn(`Could not fetch stats for week ${checkWeek}:`, err);
+                            })
+                    );
+                }
+            }
+
+            await Promise.all(recentStatsPromises);
+            this.debug(`  ${this.state.recentlyActivePlayers.size} players with recent game activity`);
+
             // Display league info
             this.displayLeagueInfo();
 
@@ -1054,6 +1089,18 @@ const App = {
                         return false;
                     }
 
+                    // Filter out players with no recent playing time
+                    // Allow rookies (years_exp 0) and injured players (already have injury_status)
+                    // But filter out healthy veterans who haven't played in 3 weeks
+                    const playerId = player.player_id || player.id;
+                    const isRookie = player.years_exp === 0 || player.years_exp === '0';
+                    const hasRecentActivity = this.state.recentlyActivePlayers.has(playerId);
+
+                    if (!isRookie && !injuryStatus && !hasRecentActivity) {
+                        // Healthy veteran with no recent stats = likely inactive/cut
+                        return false;
+                    }
+
                     return true;
                 };
 
@@ -1063,7 +1110,7 @@ const App = {
                 const myFiltered = this.state.roster.playerDetails.length - myAvailablePlayers.length;
                 const theirFiltered = partnerPlayers.length - theirAvailablePlayers.length;
                 if (myFiltered > 0 || theirFiltered > 0) {
-                    this.debug(`  Filtered ${myFiltered} injured/inactive from your roster, ${theirFiltered} from theirs`);
+                    this.debug(`  Filtered ${myFiltered} unavailable from your roster, ${theirFiltered} from theirs (injured/inactive/no recent stats)`);
                 }
 
                 // Generate all combinations for multi-player trades (only with healthy players)
