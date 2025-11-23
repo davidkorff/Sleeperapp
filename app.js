@@ -15,7 +15,37 @@ const App = {
         projections: {}, // Store projections by week
         currentWeek: 1,
         tradingAway: [],
-        tradingFor: []
+        tradingFor: [],
+        debugMessages: []
+    },
+
+    /**
+     * Add debug message to on-screen panel
+     */
+    debug(message, type = 'info') {
+        console.log(message);
+        this.state.debugMessages.push({ message, type, time: new Date().toLocaleTimeString() });
+
+        const debugPanel = document.getElementById('debugPanel');
+        const debugContent = document.getElementById('debugContent');
+
+        if (debugPanel && debugContent) {
+            debugPanel.style.display = 'block';
+            const className = type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'success';
+            debugContent.innerHTML += `<div class="${className}">[${new Date().toLocaleTimeString()}] ${message}</div>`;
+            debugContent.scrollTop = debugContent.scrollHeight;
+        }
+    },
+
+    /**
+     * Clear debug messages
+     */
+    clearDebug() {
+        this.state.debugMessages = [];
+        const debugContent = document.getElementById('debugContent');
+        if (debugContent) {
+            debugContent.innerHTML = '';
+        }
     },
 
     /**
@@ -37,6 +67,14 @@ const App = {
 
         // Attach event listeners
         this.attachEventListeners();
+
+        // Setup debug panel close button
+        const closeDebug = document.getElementById('closeDebug');
+        if (closeDebug) {
+            closeDebug.addEventListener('click', () => {
+                document.getElementById('debugPanel').style.display = 'none';
+            });
+        }
 
         // Auto-load 2025 leagues
         await this.loadUserLeagues(userId, '2025');
@@ -242,25 +280,45 @@ const App = {
             const leagueSeason = this.state.league.season || '2025';
             this.state.projections = {};
             const projectionPromises = [];
+
+            this.clearDebug();
+            this.debug(`Fetching ${leagueSeason} projections weeks ${this.state.currentWeek}-18...`);
+
             for (let week = this.state.currentWeek; week <= 18; week++) {
                 projectionPromises.push(
                     SleeperAPI.getPlayerProjections(leagueSeason, week)
                         .then(data => {
                             this.state.projections[week] = data;
-                            console.log(`Projections for week ${week}:`, data);
-                            // Log a sample projection to see format
-                            const samplePlayerId = Object.keys(data)[0];
-                            if (samplePlayerId) {
-                                console.log(`Sample projection for player ${samplePlayerId}:`, data[samplePlayerId]);
+                            const projectionCount = Object.keys(data).length;
+
+                            if (projectionCount > 0) {
+                                this.debug(`✓ Week ${week}: ${projectionCount} projections`);
+
+                                // Log sample projection format
+                                const samplePlayerId = Object.keys(data)[0];
+                                const sample = data[samplePlayerId];
+                                const sampleKeys = Object.keys(sample).join(', ');
+                                this.debug(`  Sample keys: ${sampleKeys}`);
+                            } else {
+                                this.debug(`⚠ Week ${week}: No projections`, 'warning');
                             }
                         })
                         .catch(err => {
-                            console.warn(`Failed to fetch projections for ${leagueSeason} week ${week}:`, err);
+                            this.debug(`✗ Week ${week}: ${err.message}`, 'error');
                             this.state.projections[week] = {};
                         })
                 );
             }
             await Promise.all(projectionPromises);
+
+            // Check if we got any projections at all
+            const totalProjections = Object.values(this.state.projections).reduce((sum, week) => sum + Object.keys(week).length, 0);
+            this.debug(`Total projections: ${totalProjections}`);
+
+            if (totalProjections === 0) {
+                this.debug(`⚠ No projections for ${leagueSeason}!`, 'error');
+                this.showError(`⚠️ No projections available for ${leagueSeason} season. Try using ${parseInt(leagueSeason) - 1} instead.`);
+            }
 
             // Display league info
             this.displayLeagueInfo();
@@ -609,11 +667,16 @@ const App = {
 
             // Get scoring settings from league
             const scoringSettings = this.state.league.scoring_settings || {};
-            console.log('League scoring settings:', scoringSettings);
+
+            this.debug(`\n=== ANALYZING TRADE ===`);
+            this.debug(`Trading away: ${tradingAway.map(p => p.full_name || p.first_name + ' ' + p.last_name).join(', ')}`);
+            this.debug(`Trading for: ${tradingFor.map(p => p.full_name || p.first_name + ' ' + p.last_name).join(', ')}`);
 
             for (let week = this.state.currentWeek; week <= 18; week++) {
                 const weekProjections = this.state.projections[week] || {};
-                console.log(`Analyzing trade for week ${week} with ${Object.keys(weekProjections).length} player projections`);
+                const projectionCount = Object.keys(weekProjections).length;
+
+                this.debug(`\nWeek ${week} (${projectionCount} projections):`);
 
                 const analysis = LineupOptimizer.analyzeTrade(
                     this.state.roster.playerDetails,
@@ -621,10 +684,13 @@ const App = {
                     tradingFor,
                     rosterPositions,
                     weekProjections,
-                    scoringSettings
+                    scoringSettings,
+                    (msg) => this.debug(msg)  // Pass debug function
                 );
 
-                console.log(`Week ${week} analysis:`, analysis);
+                this.debug(`  Current lineup: ${analysis.current.totalPoints.toFixed(2)} pts`);
+                this.debug(`  With trade: ${analysis.new.totalPoints.toFixed(2)} pts`);
+                this.debug(`  Difference: ${(analysis.new.totalPoints - analysis.current.totalPoints).toFixed(2)} pts`);
 
                 weeklyAnalysis.push({
                     week,
@@ -634,6 +700,11 @@ const App = {
                 totalCurrentPoints += analysis.current.totalPoints;
                 totalNewPoints += analysis.new.totalPoints;
             }
+
+            this.debug(`\n=== SEASON TOTAL ===`);
+            this.debug(`Current: ${totalCurrentPoints.toFixed(2)} pts`);
+            this.debug(`With trade: ${totalNewPoints.toFixed(2)} pts`);
+            this.debug(`Difference: ${(totalNewPoints - totalCurrentPoints).toFixed(2)} pts`);
 
             // Create aggregate analysis
             const aggregateAnalysis = {
