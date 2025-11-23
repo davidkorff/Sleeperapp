@@ -1069,8 +1069,10 @@ const App = {
                             sampleLogged = result.sampleLogged;
                             tradesAnalyzed++;
 
-                            // Only keep trades where YOU come out ahead
-                            if (result.myPointDifference > 0) {
+                            // Only keep trades where:
+                            // 1. YOU come out ahead (gain points)
+                            // 2. They don't lose more than 20 points total (roughly 3 pts/week)
+                            if (result.myPointDifference > 0 && result.theirPointDifference > -20) {
                                 allSuggestions.push({
                                     partnerName,
                                     partnerRoster,
@@ -1087,15 +1089,26 @@ const App = {
                 }
             }
 
-            // Sort by YOUR point gain (best first), then prioritize win-win trades
+            // Sort by realism and value:
+            // 1. Prioritize win-win trades (both gain)
+            // 2. Then trades where opponent loses less (more realistic)
+            // 3. Then by your point gain
             allSuggestions.sort((a, b) => {
-                const pointDiff = b.myPointDifference - a.myPointDifference;
-                if (Math.abs(pointDiff) < 0.1) {
-                    // If point gains are similar, prioritize win-win trades
-                    if (a.isWinWin && !b.isWinWin) return -1;
-                    if (!a.isWinWin && b.isWinWin) return 1;
+                // Win-win trades first
+                if (a.isWinWin && !b.isWinWin) return -1;
+                if (!a.isWinWin && b.isWinWin) return 1;
+
+                // Among similar categories, prefer trades where opponent loses less
+                if (a.isWinWin === b.isWinWin) {
+                    // Both win-win or both not win-win
+                    const opponentLossDiff = b.theirPointDifference - a.theirPointDifference;
+                    if (Math.abs(opponentLossDiff) > 5) {
+                        return opponentLossDiff; // Prefer higher (less negative) opponent change
+                    }
                 }
-                return pointDiff;
+
+                // Finally sort by your gain
+                return b.myPointDifference - a.myPointDifference;
             });
 
             // Take top 10
